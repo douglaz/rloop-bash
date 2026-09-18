@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+# rloop — the Bash Implementation of the rloop specification (spec/).
+# One Manager picks a task and judges; fresh Implementers build; a four-model Panel reviews.
+set -u
+shopt -u patsub_replacement 2>/dev/null || true
+
+version=0.1.0
+
+# --- prompts (03-prompts.md), byte for byte; rendered by literal {{NAME}} substitution -----------
+pick_tpl=$(cat <<'EOF'
+You are the Manager of an rloop Run in this repository. rloop will run an independent Implementer and an independent review Panel on a brief you write; afterwards, in this same conversation, you will judge what they did.
+
+Do this now:
+1. Understand the repository: its instructions for agents (AGENTS.md, CLAUDE.md, README.md, CONTRIBUTING.md — whichever exist), its specifications, and its issue tracker or backlog (beads via `br`, GitHub issues, a TODO file, whatever it uses).
+2. Pick the next task. The caller's instruction, which takes precedence when it names one (it may be empty):
+{{INSTRUCTION}}
+3. Claim the task in the tracker the way the repository's conventions say (for example `br update <id> --status in_progress`), if it has a tracker.
+4. Write the brief to {{TASK_FILE}}: a self-contained Markdown document that an Implementer with no memory of this conversation can build from, and that Reviewers who have never seen the tracker can judge the result against. Say what to build, what done looks like, how to verify it, and what is out of scope. Do not write the code yourself.
+
+Or, instead of a brief, write {{FINISHED_FILE}} with a first line of exactly one of:
+- `STATUS: idle` — there is no task to pick; you changed nothing.
+- `STATUS: blocked` — the task cannot be started; say why below the first line.
+Below the first line write your report for whoever started this Run.
+
+These paths were already modified or untracked before this Run started; they belong to the caller, not to you or the Implementer:
+{{DIRTY_AT_START}}
+
+Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+EOF
+)
+
+judge_tpl=$(cat <<'EOF'
+Round {{ROUND}} of at most {{MAX_ROUNDS}} is over. An Implementer worked from {{TASK_FILE}}; its output is in {{IMPLEMENTER_LOG}} (a last line `IMPLEMENTER FAILED (exit N)` means it crashed or timed out). Four independent Reviewers then read the repository's changes since commit {{BASE}} against the brief; their feedback is in:
+{{FEEDBACK_FILES}}
+A file holding `REVIEWER FAILED` is a Reviewer that crashed or timed out. Files named `rejected-*` in {{RUN_DIR}}, if any, were written over your files by another agent and set aside; read them as evidence about that agent.
+
+Review the implementation yourself, then read the feedback. Feedback is advice, not orders: send back only what makes the implementation fail the brief as written, or is a genuine defect. Reject findings that add scope, over-engineer, or ask for machinery the brief does not need. File what is worth keeping for later as an issue in the repository's tracker, following its conventions.
+
+Then do exactly one of:
+
+A. The task is done, or cannot be completed. Create the follow-up issues the repository's conventions call for; close the task in the tracker if it has one. Make sure the accepted work is in history and the tree is clean: commit what is not yet committed, tracker files included, following the repository's commit conventions — no tool or assistant attribution, no squashing or rewriting of history, no empty commit. Never edit code to get a commit past a hook or signing, and never bypass either: if a commit needs a code change, that is a finding — choose B instead. Do not commit work you did not accept. These paths were already modified or untracked before this Run started and are not yours to commit:
+{{DIRTY_AT_START}}
+Then write {{FINISHED_FILE}} with a first line of exactly `STATUS: done` or exactly `STATUS: blocked`, followed by your report: what was done; what is committed and what is left in the tree; the base commit {{BASE}} and the commit HEAD names now; your notes and questions for whoever started this Run.
+
+B. Another Round is needed. Rewrite {{TASK_FILE}} in place as a self-contained brief for a new Implementer that has no memory of this conversation and will not see the feedback: describe the current state of the repository, what is still wrong or missing, and what done looks like. Do not write {{FINISHED_FILE}}. Do not write the code yourself.
+
+If you write neither file, rloop treats it as no decision and stops.
+
+Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+EOF
+)
+
+implementer_tpl=$(cat <<'EOF'
+/goal implement the task defined in {{TASK_FILE}} until it is fully implemented. Read the repository's instructions for agents first and follow them, including whatever they say about committing. Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+EOF
+)
+
+review_tpl=$(cat <<'EOF'
+You are one of four independent Reviewers of an rloop Round. Read the repository's instructions for agents if it has any. Read the brief at {{TASK_FILE}}. Then review the repository's changes since commit {{BASE}} — committed and uncommitted, tracked and untracked; use git to see them — against that brief. Ignore changes under .rloop/ and in issue-tracker files (.beads/ and the like).
+
+Report, in Markdown, to the Manager who will judge this Round:
+1. Findings: where the implementation fails the brief, or has a defect. Each with file:line evidence and what you verified, by reading or by running. Verify before you claim; what you could not verify is a question, not a finding.
+2. Suggestions, under their own heading, which the Manager may take or leave.
+If there is nothing to report, write exactly: No findings.
+
+Do not modify the repository: no edits, no commits, no checkout, stash, reset or clean. Running the build or the tests is fine. Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+EOF
+)
+
+# --- agent command lines (02-agents.md) ------------------------------------------------------------
+deny='Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)'
+agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt> -> array cmd
+  case $1 in
+    pick) cmd=(claude -p "$2" --session-id "$sid" --model "$manager_model" --effort high --dangerously-skip-permissions) ;;
+    judge) cmd=(claude -p "$2" --resume "$sid" --model "$manager_model" --effort high --dangerously-skip-permissions) ;;
+    implementer)
+      case $implementer in
+        claude) cmd=(claude -p "$2" --dangerously-skip-permissions) ;;
+        codex) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox "$2") ;;
+      esac ;;
+    fable) cmd=(claude -p "$2" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "$deny") ;;
+    opus) cmd=(claude -p "$2" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
+    astra) cmd=(codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
+    sol) cmd=(codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh "$2") ;;
+  esac
+}
+
+# --- rloop's own command line (AGT-1, AGT-2) ------------------------------------------------------
+usage() {
+  cat <<'EOF'
+rloop [OPTIONS] [INSTRUCTION]
+
+  --auto                       run a Sequence (05-sequence.md) instead of one Run
+  --implementer claude|codex   which Implementer preset a Round uses          (default: claude)
+  --manager-model MODEL        the Manager's model                             (default: claude-fable-5-1)
+  --base REF                   the ref Reviewers diff against                  (default: HEAD at start)
+  --run-dir PATH               the Run Directory, which must not exist yet     (default: DIR-2)
+  --max-rounds N               Rounds per Run                                  (default: 10)
+  --max-runs N                 Runs per Sequence                               (default: 20)
+  --manager-timeout SECONDS    per Manager call                                (default: 3600)
+  --implementer-timeout SECONDS  per Implementer call                          (default: 14400)
+  --reviewer-timeout SECONDS   per Reviewer call                               (default: 1800)
+  --kill-after SECONDS         SIGTERM-to-SIGKILL grace                        (default: 10)
+  --version                    print the Implementation's version and exit 0
+  --help                       print this usage and exit 0
+EOF
+}
+err() { printf 'rloop: %s\n' "$*" >&2; }
+die() { err "$@"; exit 2; }
+number() { # number <flag> <value> <minimum>
+  if ! [[ $2 =~ ^[0-9]+$ ]] || [ "$2" -lt "$3" ]; then die "$1 needs a number of at least $3, got '$2'"; fi
+}
+
+auto=0 implementer=claude manager_model=claude-fable-5-1 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
+manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 kill_after=10 instruction='' have_instruction=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    --auto) auto=1; shift ;;
+    --version) echo "rloop-bash $version"; exit 0 ;;
+    --help) usage; exit 0 ;;
+    --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}" ;;
+    --implementer|--manager-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--kill-after)
+      [ $# -ge 2 ] || die "$1 needs a value"
+      case $1 in
+        --implementer) case $2 in claude|codex) implementer=$2 ;; *) die "--implementer takes claude or codex" ;; esac ;;
+        --manager-model) manager_model=$2 ;;
+        --base) base_ref=$2; have_base=1 ;;
+        --run-dir) run_dir=$2 ;;
+        --max-rounds) number "$1" "$2" 1; max_rounds=$2 ;;
+        --max-runs) number "$1" "$2" 1; max_runs=$2 ;;
+        --manager-timeout) number "$1" "$2" 0; manager_timeout=$2 ;;
+        --implementer-timeout) number "$1" "$2" 0; implementer_timeout=$2 ;;
+        --reviewer-timeout) number "$1" "$2" 0; reviewer_timeout=$2 ;;
+        --kill-after) number "$1" "$2" 0; kill_after=$2 ;;
+      esac
+      shift 2 ;;
+    --) shift; break ;;
+    -?*) die "unknown option $1" ;;
+    *) [ "$have_instruction" = 0 ] || die "more than one INSTRUCTION"; instruction=$1; have_instruction=1; shift ;;
+  esac
+done
+for arg in "$@"; do [ "$have_instruction" = 0 ] || die "more than one INSTRUCTION"; instruction=$arg; have_instruction=1; done
+if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "$run_dir" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
+case $run_dir in ''|/*) ;; *) run_dir=$PWD/$run_dir ;; esac
+
+# --- the tree (RUN-1) ------------------------------------------------------------------------------
+toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git working tree"
+[ "$(pwd -P)" = "$toplevel" ] || cd "$toplevel" || die "cannot enter $toplevel"
+
+# --- agents: spawning, timeouts, signals (AGT-12 to AGT-16) ------------------------------------------
+live=()          # process groups of running agents (the pid of each agent's `timeout`, its group leader)
+interrupted=0
+on_signal() {
+  if [ "$interrupted" = 1 ]; then [ ${#live[@]} = 0 ] || kill -KILL -- "${live[@]/#/-}" 2>/dev/null; return; fi
+  interrupted=1
+  err "interrupted"
+  [ ${#live[@]} = 0 ] || kill -TERM -- "${live[@]/#/-}" 2>/dev/null
+}
+trap on_signal INT TERM
+
+group_alive() { kill -0 -- "-$1" 2>/dev/null; }
+drain() { # drain [group...]: after an interruption, wait for every live group, SIGKILL after --kill-after, exit 2
+  local groups=("${live[@]}" "$@") t=0 any p
+  while [ "$t" -lt $((kill_after * 10)) ]; do
+    any=0; for p in "${groups[@]}"; do ! group_alive "$p" || any=1; done
+    [ "$any" = 1 ] || break
+    sleep 0.1; t=$((t + 1))
+  done
+  for p in "${groups[@]}"; do ! group_alive "$p" || kill -KILL -- "-$p" 2>/dev/null; done
+  for p in "${groups[@]}"; do while group_alive "$p"; do sleep 0.1; done; wait "$p" 2>/dev/null; done
+  exit 2
+}
+
+spawn() { # spawn <role> <round> <reviewer or ""> <timeout> <stdout file> <stderr file> <cmd...> -> pid
+  local role=$1 round=$2 reviewer=$3 secs=$4 out=$5 errf=$6; shift 6
+  [ "$interrupted" = 0 ] || drain
+  local envs=("RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
+  [ -z "$reviewer" ] || envs+=("RLOOP_REVIEWER=$reviewer")
+  env "${envs[@]}" timeout -k "$kill_after" "$secs" "$@" </dev/null >"$out" 2>"$errf" &
+  pid=$!
+  live+=("$pid")
+}
+
+reap() { # reap <pid> -> st, the call's exit status (non-zero on a timeout)
+  local p keep=()
+  while :; do
+    wait "$1"; st=$?
+    kill -0 "$1" 2>/dev/null || break   # still alive: the wait was interrupted by a signal
+  done
+  for p in "${live[@]}"; do [ "$p" = "$1" ] || keep+=("$p"); done
+  live=("${keep[@]}")
+  [ "$interrupted" = 0 ] || drain "$1"
+}
+
+note() { # note <file> <line>: append the line on a line of its own
+  [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"
+  echo "$2" >> "$1"
+}
+
+# --- the Run (01-run-lifecycle.md, 04-run-directory.md) ------------------------------------------------
+feedback_files=''
+render() { # render <template> -> stdout, by PRM-6
+  local t=$1
+  t=${t//\{\{INSTRUCTION\}\}/$instruction}; t=${t//\{\{TASK_FILE\}\}/$run_dir/task.md}
+  t=${t//\{\{FINISHED_FILE\}\}/$run_dir/finished.md}; t=${t//\{\{RUN_DIR\}\}/$run_dir}
+  t=${t//\{\{BASE\}\}/$base}; t=${t//\{\{ROUND\}\}/$round}; t=${t//\{\{MAX_ROUNDS\}\}/$max_rounds}
+  t=${t//\{\{IMPLEMENTER_LOG\}\}/$run_dir/implementer-$round.out}; t=${t//\{\{FEEDBACK_FILES\}\}/$feedback_files}
+  t=${t//\{\{DIRTY_AT_START\}\}/$dirty}
+  printf '%s' "$t"
+}
+
+end_run() { # end_run <0|1|2|3>: the Run's exit; the Finished File goes to stdout (RUN-10, SEQ-7)
+  if [ "$auto" = 1 ]; then
+    if [ -f "$run_dir/finished.md" ]; then echo "== run $run_n =="; cat "$run_dir/finished.md"; fi
+    case $1 in 0) return 0 ;; 3) exit 0 ;; *) exit "$1" ;; esac
+  fi
+  if [ "$1" != 2 ]; then
+    cat "$run_dir/finished.md"
+    [ "$1" != 0 ] || [ -z "$(git status --porcelain)" ] || err "warning: the Run ended done on a tree that is not clean"
+  fi
+  exit "$1"
+}
+
+decide() { # decide <round, 0 at the pick> <Manager exit> (RUN-11); returns 0 for next Round, 1 when the Run is over
+  local r=$1 line=
+  [ "$2" = 0 ] || { err "Manager call exited $2"; end_run 2; }
+  if [ -e "$run_dir/finished.md" ]; then
+    IFS= read -r line < "$run_dir/finished.md"
+    case $line in
+      'STATUS: done') end_run 0; return 1 ;;
+      'STATUS: blocked') end_run 1 ;;
+      'STATUS: idle') [ "$r" != 0 ] || end_run 3; err "STATUS: idle after a Round"; end_run 2 ;;
+      *) err "the Finished File's first line is not a status"; end_run 2 ;;
+    esac
+  fi
+  [ -f "$run_dir/task.md" ] || { err "the Manager wrote neither task.md nor finished.md"; end_run 2; }
+  if [ "$r" != 0 ]; then
+    ! cmp -s "$run_dir/task.md" "$run_dir/task-$r.md" || { err "no decision: task.md is unchanged and no Finished File"; end_run 2; }
+    [ "$r" -lt "$max_rounds" ] || { err "round cap $max_rounds reached; Manager session $sid"; end_run 2; }
+  fi
+  cp "$run_dir/task.md" "$run_dir/task-$((r + 1)).md" || { err "cannot snapshot task.md"; end_run 2; }
+}
+
+checkpoint() { # checkpoint <round> (DIR-6)
+  local snap=$run_dir/task-$1.md task=$run_dir/task.md
+  [ -f "$snap" ] || { err "snapshot $snap is missing"; end_run 2; }
+  if ! cmp -s "$task" "$snap"; then
+    [ ! -e "$task" ] || mv -f "$task" "$run_dir/rejected-$1-task.md"
+    rm -f "$task"
+    cp "$snap" "$task" || { err "cannot restore $task"; end_run 2; }
+    err "round $1: task.md was changed by an agent; set aside as rejected-$1-task.md and restored"
+  fi
+  if [ -e "$run_dir/finished.md" ]; then
+    mv -f "$run_dir/finished.md" "$run_dir/rejected-$1-finished.md" || { err "cannot set aside finished.md"; end_run 2; }
+    err "round $1: finished.md was written by an agent; set aside as rejected-$1-finished.md"
+  fi
+}
+
+do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Run is over
+  round=$1
+  local r=$1 rv failed=0 pids=() i
+  err "run $run_n round $r: implementer"
+  agent_cmd implementer "$(render "$implementer_tpl")"
+  spawn implementer "$r" "" "$implementer_timeout" "$run_dir/implementer-$r.out" "$run_dir/implementer-$r.err" "${cmd[@]}"
+  reap "$pid"
+  [ "$st" = 0 ] || note "$run_dir/implementer-$r.out" "IMPLEMENTER FAILED (exit $st)"
+  checkpoint "$r"
+  err "run $run_n round $r: panel"
+  for rv in fable opus astra sol; do
+    agent_cmd "$rv" "$(render "$review_tpl")"
+    spawn reviewer "$r" "$rv" "$reviewer_timeout" "$run_dir/feedback-$r-$rv.md" "$run_dir/reviewer-$r-$rv.err" "${cmd[@]}"
+    pids+=("$pid")
+  done
+  i=0
+  for rv in fable opus astra sol; do
+    reap "${pids[$i]}"; i=$((i + 1))
+    [ "$st" = 0 ] || { note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit $st)"; failed=$((failed + 1)); }
+  done
+  checkpoint "$r"
+  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel failed"; end_run 2; }
+  err "run $run_n round $r: judge"
+  feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"
+  agent_cmd judge "$(render "$judge_tpl")"
+  spawn manager "$r" "" "$manager_timeout" "$run_dir/manager-judge-$r.out" "$run_dir/manager-judge-$r.err" "${cmd[@]}"
+  reap "$pid"
+  decide "$r" "$st"
+}
+
+run_once() { # one Run, number run_n; returns only when it ended done inside a Sequence
+  local r
+  if [ -z "$run_dir" ] || [ "$auto" = 1 ]; then
+    mkdir -p .rloop/runs || die "cannot create .rloop/runs"
+    [ "$(cat .rloop/.gitignore 2>/dev/null)" = '*' ] || printf '*\n' > .rloop/.gitignore || die "cannot write .rloop/.gitignore"
+    run_dir=$PWD/.rloop/runs/$(date -u +%Y%m%dT%H%M%S.%NZ)-$$
+  fi
+  mkdir "$run_dir" 2>/dev/null || die "cannot create the Run Directory $run_dir (it exists, or its parent does not)"
+  err "run $run_n: $run_dir"
+  base=$(git rev-parse --verify "$base_ref^{commit}" 2>/dev/null) || die "cannot resolve base $base_ref"
+  dirty=$(git status --porcelain) || die "git status failed"
+  sid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null) || sid=$(uuidgen) || die "cannot generate a session id"
+  printf '%s\n' "$sid" > "$run_dir/session" || die "cannot write $run_dir/session"
+  err "run $run_n: pick"
+  round=0
+  agent_cmd pick "$(render "$pick_tpl")"
+  spawn manager 0 "" "$manager_timeout" "$run_dir/manager-pick.out" "$run_dir/manager-pick.err" "${cmd[@]}"
+  reap "$pid"
+  decide 0 "$st" || return 0
+  for ((r = 1; ; r++)); do do_round "$r" || return 0; done
+}
+
+if [ "$auto" = 1 ]; then
+  for ((run_n = 1; run_n <= max_runs; run_n++)); do
+    [ -z "$(git status --porcelain)" ] || die "the tree is not clean before run $run_n"
+    run_once
+  done
+  die "run cap $max_runs reached"
+fi
+run_n=1
+run_once
