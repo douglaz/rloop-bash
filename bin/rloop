@@ -176,7 +176,7 @@ spawn() { # spawn <role> <round> <reviewer or ""> <timeout> <stdout file> <stder
   [ "$interrupted" = 0 ] || drain
   local envs=("RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
   [ -z "$reviewer" ] || envs+=("RLOOP_REVIEWER=$reviewer")
-  env "${envs[@]}" timeout -k "$kill_after" "$secs" "$@" </dev/null >"$out" 2>"$errf" &
+  env -u RLOOP_REVIEWER "${envs[@]}" timeout -k "$kill_after" "$secs" "$@" </dev/null >"$out" 2>"$errf" &
   pid=$!
   live+=("$pid")
 }
