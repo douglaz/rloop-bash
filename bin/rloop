@@ -98,8 +98,8 @@ agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt>
       esac ;;
     fable) cmd=(claude -p "$2" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "$deny") ;;
     opus) cmd=(claude -p "$2" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
-    astra) cmd=(codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
-    sol) cmd=(codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh "$2") ;;
+    astra) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
+    sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -c model_reasoning_effort=xhigh "$2") ;;
   esac
 }
 
