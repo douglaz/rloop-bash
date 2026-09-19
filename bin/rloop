@@ -313,6 +313,7 @@ run_once() { # one Run, number run_n; returns only when it ended done inside a S
   fi
   mkdir "$run_dir" 2>/dev/null || die "cannot create the Run Directory $run_dir (it exists, or its parent does not)"
   err "run $run_n: $run_dir"
+  err "run $run_n: pid $$"
   base=$(git rev-parse --verify "$base_ref^{commit}" 2>/dev/null) || die "cannot resolve base $base_ref"
   dirty=$(git status --porcelain) || die "git status failed"
   sid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null) || sid=$(uuidgen) || die "cannot generate a session id"

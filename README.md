@@ -40,6 +40,11 @@ CI runs `nix build` and the self-check on every push and pull request
   commits sit behind a clean tree and the next invocation's base would take them in unreviewed.
   Read the Finished File: it says what is committed and what is in the tree. Reconcile before
   starting again.
+- **Detaching a long Run.** A Round takes 15–30 minutes, so launch rloop detached
+  (`setsid nohup … &`). Under `nix run` the PID the shell hands back is the wrapper's, which exits
+  once rloop starts; the Run's own PID is on the `rloop: run <n>: pid <pid>` line on standard
+  error, and, by default, the suffix of the Run Directory name. To keep the exit status of a
+  detached Run, wrap it: `sh -c 'nix run github:douglaz/rloop-bash …; echo $? > rloop.exit'`.
 - **The Run Directory** — `.rloop/runs/<timestamp>-<pid>/` by default — holds every brief, every
   Reviewer's feedback, every agent's output and the Manager's report. It is never deleted.
 
