@@ -1,0 +1,18 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      # spec/ is where the Conformance Suite lives, so the submodule must come down with it.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: cachix/install-nix-action@v31
+
+      - run: nix build
+
+      - run: spec/conformance/run ./result/bin/rloop --self-check

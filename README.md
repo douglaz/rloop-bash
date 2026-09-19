@@ -14,6 +14,9 @@ spec/conformance/run ./result/bin/rloop     # the definition of done
 spec/conformance/run ./result/bin/rloop --self-check
 ```
 
+CI runs `nix build` and the self-check on every push and pull request
+(`.github/workflows/ci.yml`).
+
 `bin/rloop` is plain Bash and also runs directly, given `git`, GNU or uutils coreutils and
 `uuidgen` on `PATH`.
 
