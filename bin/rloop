@@ -337,6 +337,7 @@ run_once() { # one Run, number run_n; returns only when it ended done inside a S
   agent_cmd pick "$(render "$pick_tpl")"
   spawn manager 0 "" "$manager_timeout" "$run_dir/manager-pick.out" "$run_dir/manager-pick.err" "${cmd[@]}"
   reap "$pid"
+  [ "$st" = 0 ] || decide 0 "$st"
   if [ "$manager" = codex ]; then
     local started='[{,][[:space:]]*"type"[[:space:]]*:[[:space:]]*"thread\.started"[[:space:]]*[,}]'
     local thread_id='[{,][[:space:]]*"thread_id"[[:space:]]*:[[:space:]]*"([^"\\]+)"'
