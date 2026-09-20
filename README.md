@@ -28,9 +28,8 @@ CI runs `nix build` and the self-check on every push and pull request
 - **Blocked (exit 1) is a question for you.** The Manager blocks when the task turns on a point
   the repository's specifications leave ambiguous — it never picks a reading — and the report
   names the passage and recommends a clarification. Clarify the specification, then run again.
-  Implementation choices the specifications leave open it settles by consulting advisers
-  (`spec/01-run-lifecycle.md`, `RUN-20`), and a choice they leave unsettled blocks for you too:
-  the report names the models that went quiet and says whether the ones that answered agreed.
+  An implementation choice the specifications leave open can block a Run too; `RUN-20` in
+  `spec/01-run-lifecycle.md` says when, and what the report will tell you.
 - **A Sequence:** check out the branch the work should land on, then `rloop --auto`. It runs
   until the Manager finds nothing left (exit 0), a task blocks (1), or something fails (2). The
   Manager commits each accepted task before the next starts; rloop never commits, branches or
