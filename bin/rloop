@@ -39,9 +39,9 @@ EOF
 )
 
 judge_tpl=$(cat <<'EOF'
-Round {{ROUND}} of at most {{MAX_ROUNDS}} is over. An Implementer worked from {{TASK_FILE}}; its output is in {{IMPLEMENTER_LOG}} (a last line `IMPLEMENTER FAILED (exit N)` means it crashed or timed out). Four independent Reviewers then read the repository's changes since commit {{BASE}} against the brief; their feedback is in:
+Round {{ROUND}} of at most {{MAX_ROUNDS}} is over. An Implementer worked from {{TASK_FILE}}; its output is in {{IMPLEMENTER_LOG}} (a last line `IMPLEMENTER FAILED (exit N)` means it crashed or timed out). The Panel's Reviewers then read the repository's changes since commit {{BASE}} against the brief; their feedback is in:
 {{FEEDBACK_FILES}}
-A file holding `REVIEWER FAILED` is a Reviewer that crashed or timed out. Files named `rejected-*` in {{RUN_DIR}}, if any, were written over your files by another agent and set aside; read them as evidence about that agent.
+A file holding `REVIEWER FAILED` is a Reviewer that crashed or timed out; one holding `REVIEWER NOT RUN` is a Reviewer that was never called, because its model could not answer. Files named `rejected-*` in {{RUN_DIR}}, if any, were written over your files by another agent and set aside; read them as evidence about that agent.
 
 Review the implementation yourself, then read the feedback. Feedback is advice, not orders: send back only what makes the implementation fail the brief as written, or is a genuine defect. Reject findings that add scope, over-engineer, or ask for machinery the brief does not need. File what is worth keeping for later as an issue in the repository's tracker, following its conventions.
 
@@ -108,6 +108,7 @@ agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt>
     opus) cmd=(claude -p "$2" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
     astra) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
     sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -c model_reasoning_effort=xhigh "$2") ;;
+    probe) cmd=(claude -p "/usage") ;;
   esac
 }
 
@@ -127,6 +128,7 @@ rloop [OPTIONS] [INSTRUCTION]
   --manager-timeout SECONDS    per Manager call                                (default: 3600)
   --implementer-timeout SECONDS  per Implementer call                          (default: 14400)
   --reviewer-timeout SECONDS   per Reviewer call                               (default: 1800)
+  --probe-timeout SECONDS      the availability probe's bound (RUN-21)         (default: 60)
   --kill-after SECONDS         SIGTERM-to-SIGKILL grace                        (default: 10)
   --version                    print the Implementation's version and exit 0
   --help                       print this usage and exit 0
@@ -139,14 +141,14 @@ number() { # number <flag> <value> <minimum>
 }
 
 auto=0 manager=claude implementer=claude manager_model=claude-fable-5-1 manager_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
-manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 kill_after=10 instruction='' have_instruction=0
+manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
 while [ $# -gt 0 ]; do
   case $1 in
     --auto) auto=1; shift ;;
     --version) echo "rloop-bash $version"; exit 0 ;;
     --help) usage; exit 0 ;;
     --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}" ;;
-    --manager|--implementer|--manager-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--kill-after)
+    --manager|--implementer|--manager-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--probe-timeout|--kill-after)
       [ $# -ge 2 ] || die "$1 needs a value"
       case $1 in
         --manager) case $2 in claude|codex) manager=$2 ;; *) die "--manager takes claude or codex" ;; esac ;;
@@ -159,6 +161,7 @@ while [ $# -gt 0 ]; do
         --manager-timeout) number "$1" "$2" 0; manager_timeout=$2 ;;
         --implementer-timeout) number "$1" "$2" 0; implementer_timeout=$2 ;;
         --reviewer-timeout) number "$1" "$2" 0; reviewer_timeout=$2 ;;
+        --probe-timeout) number "$1" "$2" 0; probe_timeout=$2 ;;
         --kill-after) number "$1" "$2" 0; kill_after=$2 ;;
       esac
       shift 2 ;;
@@ -285,6 +288,30 @@ checkpoint() { # checkpoint <round> (DIR-6)
   fi
 }
 
+# RUN-21: read the probe's output and record one verdict per Reviewer. Fail open -- only a zero
+# exit and a line *beginning* `Current week (<family>): 100% used` reads `unavailable`; a codex
+# Reviewer has no family and is always `unknown`.
+# Matched in the shell, not with grep or sed: neither is on the PATH flake.nix builds, and a
+# missing one would read every Reviewer `unknown` without saying so. The case glob is anchored
+# at the start of the line, which is what RUN-21 requires.
+is_unavailable() { case $unavail in *" $1 "*) return 0 ;; esac; return 1; }
+probe_verdicts() { # probe_verdicts <round> <probe exit status> -> unavail, space-delimited
+  local r=$1 pst=$2 rv fam line hit
+  unavail=' '
+  : > "$run_dir/probe-$r.md"
+  for rv in fable opus astra sol; do
+    case $rv in fable) fam=Fable ;; opus) fam=Opus ;; *) fam='' ;; esac
+    hit=0
+    if [ "$pst" = 0 ] && [ -n "$fam" ] && [ -f "$run_dir/probe-$r.out" ]; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        case $line in "Current week ($fam): 100% used"*) hit=1; break ;; esac
+      done < "$run_dir/probe-$r.out"
+    fi
+    if [ "$hit" = 1 ]; then unavail="$unavail$rv "; echo "$rv:unavailable" >> "$run_dir/probe-$r.md"
+    else echo "$rv:unknown" >> "$run_dir/probe-$r.md"; fi
+  done
+}
+
 do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Run is over
   round=$1
   local r=$1 rv failed=0 pids=() i
@@ -294,19 +321,35 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
   reap "$pid"
   [ "$st" = 0 ] || note "$run_dir/implementer-$r.out" "IMPLEMENTER FAILED (exit $st)"
   checkpoint "$r"
+  err "run $run_n round $r: probe"
+  agent_cmd probe
+  spawn probe "$r" "" "$probe_timeout" "$run_dir/probe-$r.out" "$run_dir/probe-$r.err" "${cmd[@]}"
+  reap "$pid"
+  probe_verdicts "$r" "$st"
   err "run $run_n round $r: panel"
   for rv in fable opus astra sol; do
+    if is_unavailable "$rv"; then
+      # RUN-15: not called, but still a Reviewer of the Panel. rloop writes the file in its place.
+      echo "REVIEWER NOT RUN (unavailable)" > "$run_dir/feedback-$r-$rv.md"
+      : > "$run_dir/reviewer-$r-$rv.err"
+      pids+=("")
+      failed=$((failed + 1))
+      continue
+    fi
     agent_cmd "$rv" "$(render "$review_tpl")"
     spawn reviewer "$r" "$rv" "$reviewer_timeout" "$run_dir/feedback-$r-$rv.md" "$run_dir/reviewer-$r-$rv.err" "${cmd[@]}"
     pids+=("$pid")
   done
   i=0
   for rv in fable opus astra sol; do
-    reap "${pids[$i]}"; i=$((i + 1))
-    [ "$st" = 0 ] || { note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit $st)"; failed=$((failed + 1)); }
+    if [ -n "${pids[$i]}" ]; then
+      reap "${pids[$i]}"
+      [ "$st" = 0 ] || { note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit $st)"; failed=$((failed + 1)); }
+    fi
+    i=$((i + 1))
   done
   checkpoint "$r"
-  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel failed"; end_run 2; }
+  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
   err "run $run_n round $r: judge"
   feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"
   agent_cmd judge "$(render "$judge_tpl")"
