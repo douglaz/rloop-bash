@@ -9,8 +9,9 @@ order. The Specification is authoritative; nothing here restates it.
 
 - The executable is `bin/rloop`, plain Bash, and `nix build` yields `result/bin/rloop` (a
   `flake.nix` with `writeShellApplication` wrapping `git` and coreutils is enough).
-- `spec/conformance/run ./result/bin/rloop --self-check` passes. That suite is the definition of
-  done; there is no other test suite to write.
+- `spec/conformance/run ./result/bin/rloop --self-check` and
+  `spec/conformance/test-panel-trace ./result/bin/rloop` both pass. Together they are the
+  definition of done; there is no other test suite to write.
 - Prompts and agent command lines are hardcoded in `bin/rloop`, byte for byte as
   `spec/02-agents.md` and `spec/03-prompts.md` state them. The Implementation reads nothing from
   `spec/` at build or run time (`spec/docs/adr/0001-*.md`).

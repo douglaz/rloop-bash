@@ -12,9 +12,10 @@ git submodule update --init
 nix build                                   # result/bin/rloop
 spec/conformance/run ./result/bin/rloop     # the definition of done
 spec/conformance/run ./result/bin/rloop --self-check
+spec/conformance/test-panel-trace ./result/bin/rloop
 ```
 
-CI runs `nix build` and the self-check on every push and pull request
+CI runs `nix build`, the self-check and the Panel trace check on every push and pull request
 (`.github/workflows/ci.yml`).
 
 `bin/rloop` is plain Bash and also runs directly, given `git`, GNU or uutils coreutils and
