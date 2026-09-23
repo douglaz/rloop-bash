@@ -16,3 +16,5 @@ jobs:
       - run: nix build
 
       - run: spec/conformance/run ./result/bin/rloop --self-check
+
+      - run: spec/conformance/test-panel-trace ./result/bin/rloop
