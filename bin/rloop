@@ -371,8 +371,8 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     i=$((i + 1))
   done
   checkpoint "$r"
-  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
   refuse manager
+  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
   err "run $run_n round $r: judge"
   feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"
   agent_cmd judge "$(render "$judge_tpl")"
