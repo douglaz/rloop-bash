@@ -16,7 +16,7 @@ order. The Specification is authoritative; nothing here restates it.
 - Prompts and agent command lines are hardcoded in `bin/rloop`, byte for byte as
   `spec/02-agents.md` and `spec/03-prompts.md` state them. The Implementation reads nothing from
   `spec/` at build or run time (`spec/docs/adr/0001-*.md`).
-- Keep it small: the loop is about two hundred lines. No rollback, no resume, no daemon, no
+- Keep it small: the loop is about five hundred lines. No rollback, no resume, no daemon, no
   configuration file, no environment-variable flags (`spec/00-overview.md`, non-goals).
 
 ## Working here
