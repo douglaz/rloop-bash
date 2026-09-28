@@ -8,7 +8,8 @@ order. The Specification is authoritative; nothing here restates it.
 ## What must be true
 
 - The executable is `bin/rloop`, plain Bash, and `nix build` yields `result/bin/rloop` (a
-  `flake.nix` with `writeShellApplication` wrapping `git` and coreutils is enough).
+  `flake.nix` with `writeShellApplication` wrapping `git`, coreutils, diffutils (`cmp`) and
+  util-linux (`uuidgen`) is enough).
 - `spec/conformance/run ./result/bin/rloop --self-check` and
   `spec/conformance/test-panel-trace ./result/bin/rloop` both pass. Together they are the
   definition of done; there is no other test suite to write.

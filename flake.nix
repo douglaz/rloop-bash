@@ -14,10 +14,10 @@
           name = "rloop";
           # The script keeps its own `set -u`; errexit would fight a loop that inspects exit codes.
           bashOptions = [ "nounset" ];
-          # git, coreutils and util-linux (uuidgen) are appended, not prepended: whatever the
-          # caller has first on PATH — its own git, its own agent CLIs — must win.
+          # git, coreutils, diffutils (cmp) and util-linux (uuidgen) are appended, not prepended:
+          # whatever the caller has first on PATH — its own git, its own agent CLIs — must win.
           text = ''
-            export PATH="$PATH:${pkgs.lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.util-linux ]}"
+            export PATH="$PATH:${pkgs.lib.makeBinPath [ pkgs.git pkgs.coreutils pkgs.diffutils pkgs.util-linux ]}"
           '' + builtins.readFile ./bin/rloop;
         };
         rloop = self.packages.${pkgs.system}.default;

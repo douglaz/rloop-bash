@@ -18,8 +18,8 @@ spec/conformance/test-panel-trace ./result/bin/rloop
 CI runs `nix build`, the self-check and the Panel trace check on every push and pull request
 (`.github/workflows/ci.yml`).
 
-`bin/rloop` is plain Bash and also runs directly, given `git`, GNU or uutils coreutils and
-`uuidgen` on `PATH`. With no clone at all: `nix run github:douglaz/rloop-bash`.
+`bin/rloop` is plain Bash and also runs directly, given `git`, GNU or uutils coreutils, `cmp`
+(diffutils) and `uuidgen` on `PATH`. With no clone at all: `nix run github:douglaz/rloop-bash`.
 
 ## Use
 

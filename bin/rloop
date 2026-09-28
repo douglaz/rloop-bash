@@ -22,7 +22,7 @@ Do this now:
      codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "<your question>"
      Two distinct models must answer; one answer does not settle it. An answer is a call that finishes within its bound, exits zero and takes a position on the question. A timeout, non-zero exit, empty output, output that is only an error, a refusal, or prose that takes no position is not an answer; judge whether hedged prose takes a position. Replace a model that did not answer by its counterpart, fable↔opus or astra↔sol, not by the next name on the roster, and do not call a model that did not answer again in this Run. Continue with eligible models until two answer or none remain within the budget. Prefer one claude answer and one codex answer; if neither model of one vendor answers, two same-vendor answers suffice, but say the Consultation was single-vendor wherever you record it — the brief, or {{FINISHED_FILE}} when you block before writing one. If two answering advisers agree, choose with them. If they disagree, put the same question to the remaining eligible advisers. The other pair's commands are exactly:
      claude -p "<your question>" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
-     codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh "<your question>"
+     codex exec -s read-only -m gpt-6-sol -c model_reasoning_effort=xhigh "<your question>"
      Before calling any adviser, choose each call's maximum duration, a total Consultation budget and time reserved to write whichever file the outcome needs — {{TASK_FILE}} if you settle the choice, {{FINISHED_FILE}} if you block. Use your shell tool to bound every call through completion or termination; a tool returning while the adviser still runs is not completion. Keep the whole Consultation within that budget and leave enough of your turn to write that file. Record the chosen durations, bounds used and each call's elapsed time, every model called and what it did — answered, did not answer with the reason, or refused — with the question and the answers — in the brief with the choice you settled, or in the report with your recommendation if you blocked before writing a brief. Record there too each adviser you skipped because this prompt lists it below as unable to answer now, as one that did not answer because its model was out of quota when rloop checked. If the advisers leave the choice unsettled, stop and write {{FINISHED_FILE}} with `STATUS: blocked`, with the question, every answer and what you recommend; name the models that did not answer and say whether those that did answer agreed. Silence is not disagreement, and neither one is a clarification of the specifications. A choice the brief does not need to settle is the Implementer's to make.
 5. Write the brief to {{TASK_FILE}}: a self-contained Markdown document that an Implementer with no memory of this conversation can build from, and that Reviewers who have never seen the tracker can judge the result against. Say what to build, what done looks like, how to verify it, and what is out of scope. Do not write the code yourself.
 
@@ -37,7 +37,7 @@ These paths were already modified or untracked before this Run started; they bel
 These advisers cannot answer now — their models were out of quota when rloop checked, just before this pick — so count each as a model that did not answer and do not call it:
 {{UNAVAILABLE}}
 
-Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+Run every command in the foreground and wait for it to finish; do not use your shell tool's background facility, because nothing resumes you if your turn ends while a command is still running. Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
 EOF
 )
 
@@ -53,7 +53,7 @@ claude -p "<your question>" --model claude-fable-5-1 --effort high --dangerously
 codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "<your question>"
 Do not settle the choice with only one answer: two distinct models must answer. Count a call only when it finishes within its bound, exits zero and states a position. Timeouts, non-zero exits, empty output, output consisting only of an error, refusals and prose with no position are not answers; whether hedged prose states a position is your judgment. For a non-answer use that model's counterpart — fable↔opus, astra↔sol — rather than roster order, and never call that non-answering model again in this Run. Try eligible models until two have answered or none remain within the budget. Seek one claude answer and one codex answer; when neither model of one vendor answers, two from the other vendor are enough, and you must identify the Consultation as single-vendor wherever you record it — the next brief, or {{FINISHED_FILE}} when you block before writing one. Choose with two answering advisers who agree; if they disagree, ask the remaining eligible advisers the same question. The other pair uses exactly these commands:
 claude -p "<your question>" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
-codex exec -s read-only -m gpt-5.6-sol -c model_reasoning_effort=xhigh "<your question>"
+codex exec -s read-only -m gpt-6-sol -c model_reasoning_effort=xhigh "<your question>"
 Before any adviser call, set a maximum duration for each call and a budget for the entire Consultation, reserving enough of your turn to write whichever file the outcome needs — {{TASK_FILE}} if you settle the choice, {{FINISHED_FILE}} if you block. Enforce each bound through your shell tool until the call completes or is terminated, and stay within the total budget; a shell tool that returns while an adviser is still running has not completed that adviser call. Record the chosen durations, the bounds used and elapsed time for each call, every model you called and whether it answered, did not answer (and why), or refused, together with the question and all answers — in the next brief with the choice you settled, or in the report with your recommendation when you blocked before writing a brief. Record there too each adviser you skipped because a `REVIEWER NOT RUN` file shows its model could not answer, as one that did not answer for that reason. When the advisers leave the choice unsettled, choose A below with `STATUS: blocked`, giving the question, every answer and your recommendation; name the models that did not answer and say whether those that did answer agreed. Silence is not disagreement, and neither one is a clarification of the specifications.
 
 Then do exactly one of:
@@ -66,7 +66,7 @@ B. Another Round is needed. Rewrite {{TASK_FILE}} in place as a self-contained b
 
 If you write neither file, rloop treats it as no decision and stops.
 
-Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
+Run every command in the foreground and wait for it to finish; do not use your shell tool's background facility, because nothing resumes you if your turn ends while a command is still running. Do not create, modify or delete anything under {{RUN_DIR}} except the file this prompt tells you to write.
 EOF
 )
 
@@ -110,7 +110,7 @@ agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt>
     fable) cmd=(claude -p "$2" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "$deny") ;;
     opus) cmd=(claude -p "$2" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
     astra) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
-    sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -c model_reasoning_effort=xhigh "$2") ;;
+    sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-sol -c model_reasoning_effort=xhigh "$2") ;;
     probe) cmd=(claude -p "/usage") ;;
   esac
 }
@@ -140,35 +140,42 @@ EOF
 }
 err() { printf 'rloop: %s\n' "$*" >&2; }
 die() { err "$@"; exit 2; }
-number() { # number <flag> <value> <minimum>
-  if ! [[ $2 =~ ^[0-9]+$ ]] || [ "$2" -lt "$3" ]; then die "$1 needs a number of at least $3, got '$2'"; fi
+number() { # number <flag> <value> <minimum> -> num, the value in base ten (AGT-2: `08` is `8`)
+  if ! [[ $2 =~ ^[0-9]+$ ]] || [ "$((10#$2))" -lt "$3" ]; then die "$1 needs a number of at least $3, got '$2'"; fi
+  num=$((10#$2))
 }
 
 auto=0 manager=claude implementer=claude manager_model=claude-fable-5-1 manager_model_given=0
 implementer_model=claude-fable-5-1 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
 manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
+inline=0        # the value came from --flag=value, so AGT-2's "next argument begins with --" test does not apply to it
 while [ $# -gt 0 ]; do
   case $1 in
     --auto) auto=1; shift ;;
     --version) echo "rloop-bash $version"; exit 0 ;;
     --help) usage; exit 0 ;;
-    --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}" ;;
+    # AGT-2: a value given with `=` to a flag that takes none is an unknown option, and `--=x`
+    # names no flag AGT-1 defines.
+    --auto=*|--help=*|--version=*|--=*) die "unknown option $1" ;;
+    --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}"; inline=1 ;;
     --manager|--implementer|--manager-model|--implementer-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--probe-timeout|--kill-after)
-      [ $# -ge 2 ] || die "$1 needs a value"
+      # AGT-2: the value is missing when the option is last or the next argument begins with `--`.
+      if [ $# -lt 2 ] || { [ "$inline" = 0 ] && [ "${2#--}" != "$2" ]; }; then die "$1 needs a value"; fi
+      inline=0
       case $1 in
         --manager) case $2 in claude|codex) manager=$2 ;; *) die "--manager takes claude or codex" ;; esac ;;
         --implementer) case $2 in claude|codex) implementer=$2 ;; *) die "--implementer takes claude or codex" ;; esac ;;
         --manager-model) manager_model=$2; manager_model_given=1 ;;
         --implementer-model) implementer_model=$2; implementer_model_given=1 ;;
         --base) base_ref=$2; have_base=1 ;;
-        --run-dir) run_dir=$2 ;;
-        --max-rounds) number "$1" "$2" 1; max_rounds=$2 ;;
-        --max-runs) number "$1" "$2" 1; max_runs=$2 ;;
-        --manager-timeout) number "$1" "$2" 0; manager_timeout=$2 ;;
-        --implementer-timeout) number "$1" "$2" 0; implementer_timeout=$2 ;;
-        --reviewer-timeout) number "$1" "$2" 0; reviewer_timeout=$2 ;;
-        --probe-timeout) number "$1" "$2" 0; probe_timeout=$2 ;;
-        --kill-after) number "$1" "$2" 0; kill_after=$2 ;;
+        --run-dir) run_dir=$2; have_run_dir=1 ;;
+        --max-rounds) number "$1" "$2" 1; max_rounds=$num ;;
+        --max-runs) number "$1" "$2" 1; max_runs=$num ;;
+        --manager-timeout) number "$1" "$2" 1; manager_timeout=$num ;;
+        --implementer-timeout) number "$1" "$2" 1; implementer_timeout=$num ;;
+        --reviewer-timeout) number "$1" "$2" 1; reviewer_timeout=$num ;;
+        --probe-timeout) number "$1" "$2" 1; probe_timeout=$num ;;
+        --kill-after) number "$1" "$2" 1; kill_after=$num ;;
       esac
       shift 2 ;;
     --) shift; break ;;
@@ -179,7 +186,8 @@ done
 if [ "$manager_model_given" = 0 ] && [ "$manager" = codex ]; then manager_model=gpt-6-astra; fi
 if [ "$implementer_model_given" = 0 ] && [ "$implementer" = codex ]; then implementer_model=gpt-6-astra; fi
 for arg in "$@"; do [ "$have_instruction" = 0 ] || die "more than one INSTRUCTION"; instruction=$arg; have_instruction=1; done
-if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "$run_dir" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
+# SEQ-3 forbids the combination of options, so the test is of each option's presence, not its value.
+if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "${have_run_dir:-}" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
 case $run_dir in ''|/*) ;; *) run_dir=$PWD/$run_dir ;; esac
 
 # --- the tree (RUN-1) ------------------------------------------------------------------------------
@@ -220,6 +228,15 @@ spawn() { # spawn <role> <round> <reviewer or ""> <timeout> <stdout file> <stder
   live+=("$pid")
 }
 
+sweep() { # sweep <group> (AGT-15): SIGTERM, up to --kill-after for the group to empty, then SIGKILL
+  local sig t
+  for sig in TERM KILL; do
+    group_alive "$1" || return 0
+    kill -"$sig" -- "-$1" 2>/dev/null
+    for ((t = 0; t < kill_after * 10; t++)); do group_alive "$1" || break; sleep 0.1; done
+  done
+}
+
 reap() { # reap <pid> -> st, the call's exit status (non-zero on a timeout)
   local p keep=()
   while :; do
@@ -228,6 +245,10 @@ reap() { # reap <pid> -> st, the call's exit status (non-zero on a timeout)
   done
   for p in "${live[@]}"; do [ "$p" = "$1" ] || keep+=("$p"); done
   live=("${keep[@]}")
+  # AGT-15: the group goes before the step that follows the call, whatever the call's fate --
+  # `timeout` reaps only its own child, so a straggler survives a call that ended at the limit
+  # too. The status above stays the spawned process's.
+  sweep "$1"
   [ "$interrupted" = 0 ] || drain "$1"
 }
 
@@ -238,19 +259,42 @@ note() { # note <file> <line>: append the line on a line of its own
 
 # --- the Run (01-run-lifecycle.md, 04-run-directory.md) ------------------------------------------------
 feedback_files=''
+# PRM-6: one pass over the template, so a value substituted in is never scanned again and
+# placeholder text inside a value -- an instruction holding {{TASK_FILE}}, a Run Directory path
+# holding {{INSTRUCTION}} -- survives byte for byte. A `${t//...}` per placeholder cannot: each
+# rescans the values the ones before it inserted. A name no placeholder below owns is emitted as
+# it stands, `{{` included.
 render() { # render <template> -> stdout, by PRM-6
-  local t=$1
-  t=${t//\{\{INSTRUCTION\}\}/$instruction}; t=${t//\{\{TASK_FILE\}\}/$run_dir/task.md}
-  t=${t//\{\{FINISHED_FILE\}\}/$run_dir/finished.md}; t=${t//\{\{RUN_DIR\}\}/$run_dir}
-  t=${t//\{\{BASE\}\}/$base}; t=${t//\{\{ROUND\}\}/$round}; t=${t//\{\{MAX_ROUNDS\}\}/$max_rounds}
-  t=${t//\{\{IMPLEMENTER_LOG\}\}/$run_dir/implementer-$round.out}; t=${t//\{\{FEEDBACK_FILES\}\}/$feedback_files}
-  t=${t//\{\{DIRTY_AT_START\}\}/$dirty}; t=${t//\{\{UNAVAILABLE\}\}/$unavailable}
-  printf '%s' "$t"
+  local t=$1 out='' name rest
+  while [ -n "$t" ]; do
+    case $t in *'{{'*) ;; *) out+=$t; break ;; esac
+    out+="${t%%'{{'*}"
+    rest=${t#*'{{'}
+    name=''
+    case $rest in *'}}'*) name=${rest%%'}}'*} ;; esac
+    case $name in
+      INSTRUCTION) out+="$instruction" ;;
+      TASK_FILE) out+="$run_dir/task.md" ;;
+      FINISHED_FILE) out+="$run_dir/finished.md" ;;
+      RUN_DIR) out+="$run_dir" ;;
+      BASE) out+="$base" ;;
+      ROUND) out+="$round" ;;
+      MAX_ROUNDS) out+="$max_rounds" ;;
+      IMPLEMENTER_LOG) out+="$run_dir/implementer-$round.out" ;;
+      FEEDBACK_FILES) out+="$feedback_files" ;;
+      DIRTY_AT_START) out+="$dirty" ;;
+      UNAVAILABLE) out+="$unavailable" ;;
+      *) out+='{{'; t=$rest; continue ;;
+    esac
+    t=${rest#*'}}'}
+  done
+  printf '%s' "$out"
 }
 
 end_run() { # end_run <0|1|2|3>: the Run's exit; the Finished File goes to stdout (RUN-10, SEQ-7)
   if [ "$auto" = 1 ]; then
-    if [ -f "$run_dir/finished.md" ]; then echo "== run $run_n =="; cat "$run_dir/finished.md"; fi
+    # SEQ-7: a Run that ended 2 prints nothing, as RUN-10 says of a lone one, Finished File or not.
+    if [ "$1" != 2 ]; then echo "== run $run_n =="; cat "$run_dir/finished.md"; fi
     case $1 in 0) return 0 ;; 3) exit 0 ;; *) exit "$1" ;; esac
   fi
   if [ "$1" != 2 ]; then
@@ -264,7 +308,9 @@ decide() { # decide <round, 0 at the pick> <Manager exit> (RUN-11); returns 0 fo
   local r=$1 line=
   [ "$2" = 0 ] || { err "Manager call exited $2"; end_run 2; }
   if [ -e "$run_dir/finished.md" ]; then
-    IFS= read -r line < "$run_dir/finished.md"
+    # RUN-9 compares the first line byte for byte, NUL bytes included, and `read` drops those
+    # silently: `tr` turns each into SOH first, so a NUL-split status reads as none of the three.
+    IFS= read -r line < <(tr '\0' '\1' < "$run_dir/finished.md")
     case $line in
       'STATUS: done') end_run 0; return 1 ;;
       'STATUS: blocked') end_run 1 ;;
@@ -300,7 +346,8 @@ checkpoint() { # checkpoint <round> (DIR-6)
 # `unavailable`; a model off the table (every codex one) has no family and is always `unknown`.
 # Matched in the shell, not with grep or sed: neither is on the PATH flake.nix builds, and a
 # missing one would read every Seat `unknown` without saying so. The case glob is anchored
-# at the start of the line, which is what RUN-21 requires.
+# at the start of the line, which is what RUN-21 requires, and each NUL byte becomes SOH before
+# the read, which drops one silently: a NUL-split line does not begin with RUN-21's prefix.
 is_unavailable() { case $unavail in *" $1 "*) return 0 ;; esac; return 1; }
 probe_verdicts() { # probe_verdicts <pick|round> <probe exit status> -> unavail, space-delimited; line_<seat>
   local r=$1 pst=$2 seat model key fam line hit
@@ -317,7 +364,7 @@ probe_verdicts() { # probe_verdicts <pick|round> <probe exit status> -> unavail,
     if [ "$pst" = 0 ] && [ -n "$fam" ] && [ -f "$run_dir/probe-$r.out" ]; then
       while IFS= read -r line || [ -n "$line" ]; do
         case $line in "Current week ($fam): 100% used"*) hit=$line; break ;; esac
-      done < "$run_dir/probe-$r.out"
+      done < <(tr '\0' '\1' < "$run_dir/probe-$r.out")
     fi
     if [ -n "$hit" ]; then unavail="$unavail$seat "; printf -v "line_$seat" '%s' "$hit"; echo "$seat:unavailable" >> "$run_dir/probe-$r.md"
     else echo "$seat:unknown" >> "$run_dir/probe-$r.md"; fi
@@ -383,9 +430,12 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
 
 run_once() { # one Run, number run_n; returns only when it ended done inside a Sequence
   local r rv line
-  if [ -z "$run_dir" ] || [ "$auto" = 1 ]; then
+  if [ -z "${have_run_dir:-}" ] || [ "$auto" = 1 ]; then
     mkdir -p .rloop/runs || die "cannot create .rloop/runs"
-    [ "$(cat .rloop/.gitignore 2>/dev/null)" = '*' ] || printf '*\n' > .rloop/.gitignore || die "cannot write .rloop/.gitignore"
+    # DIR-2 wants exactly the two bytes `*` and a newline, `rewriting a file whose bytes differ`.
+    # Writing them unconditionally is that, and cheaper than comparing: command substitution
+    # strips trailing newlines, so a file of `*` and two, or of `*` and none, read as a match.
+    printf '*\n' > .rloop/.gitignore || die "cannot write .rloop/.gitignore"
     run_dir=$PWD/.rloop/runs/$(date -u +%Y%m%dT%H%M%S.%NZ)-$$
   fi
   mkdir "$run_dir" 2>/dev/null || die "cannot create the Run Directory $run_dir (it exists, or its parent does not)"
