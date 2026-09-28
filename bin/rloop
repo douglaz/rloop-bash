@@ -245,17 +245,17 @@ reap() { # reap <pid> -> st, the call's exit status (non-zero on a timeout)
   reaped "$1"
 }
 
-reaped() { # reaped <pid>: AGT-15's reap of one call's group, the process itself already waited for
-  local p keep=()
+reaped() { # reaped <group...>: AGT-15's reap of each call's group, the processes already waited for
+  local p keep=() gone=" $* "
   # AGT-15: the group goes before the step that follows the call, whatever the call's fate --
   # `timeout` reaps only its own child, so a straggler survives a call that ended at the limit
   # too. The caller's status stays the spawned process's.
   # The group stays in `live` across the sweep, so the handler can still reach it: a SIGINT or
   # SIGTERM arriving mid-sweep signals it too, and a second SIGINT SIGKILLs it at once.
-  sweep "$1"
-  for p in "${live[@]}"; do [ "$p" = "$1" ] || keep+=("$p"); done
+  for p; do sweep "$p"; done
+  for p in "${live[@]}"; do [[ $gone == *" $p "* ]] || keep+=("$p"); done
   live=("${keep[@]}")
-  [ "$interrupted" = 0 ] || drain "$1"
+  [ "$interrupted" = 0 ] || drain "$@"
 }
 
 note() { # note <file> <line>: append the line on a line of its own
@@ -389,7 +389,7 @@ refuse() { # refuse <seat...> (RUN-22): exit 2 naming each given Seat recorded u
 
 do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Run is over
   round=$1
-  local r=$1 rv failed=0 pids=() i out=() keep=() p done_pid rst
+  local r=$1 rv failed=0 pids=() i out=() swept=() keep=() p done_pid rst
   local -A owner=()   # the pid of each Reviewer rloop started -> that Reviewer's name
   err "run $run_n round $r: implementer"
   agent_cmd implementer "$(render "$implementer_tpl")"
@@ -432,9 +432,12 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     if [ -z "${done_pid:-}" ]; then [ "$interrupted" = 0 ] || drain; continue; fi
     rv=${owner[$done_pid]}
     keep=(); for p in "${out[@]}"; do [ "$p" = "$done_pid" ] || keep+=("$p"); done; out=("${keep[@]}")
-    reaped "$done_pid"
+    # AGT-15: this group's grace runs on its own, so the Reviewer that exits next is named and
+    # signalled at once rather than a grace late. `reaped` below leaves every group empty.
+    sweep "$done_pid" & swept+=("$done_pid")
     [ "$rst" = 0 ] || { note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit $rst)"; failed=$((failed + 1)); }
   done
+  [ ${#swept[@]} = 0 ] || reaped "${swept[@]}"
   checkpoint "$r"
   refuse manager
   [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
