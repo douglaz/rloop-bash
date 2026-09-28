@@ -252,6 +252,9 @@ reaped() { # reaped <group...>: AGT-15's reap of each call's group, the processe
   # too. The caller's status stays the spawned process's.
   # The group stays in `live` across the sweep, so the handler can still reach it: a SIGINT or
   # SIGTERM arriving mid-sweep signals it too, and a second SIGINT SIGKILLs it at once.
+  # For a Panel group this is the second sweep -- the wait loop backgrounded the first, for
+  # promptness -- and returning from here is what leaves every group empty, which the Checkpoint
+  # that follows (RUN-7 step 5) and RUN-15's failure notes both rely on.
   for p; do sweep "$p"; done
   for p in "${live[@]}"; do [[ $gone == *" $p "* ]] || keep+=("$p"); done
   live=("${keep[@]}")
