@@ -390,7 +390,7 @@ refuse() { # refuse <seat...> (RUN-22): exit 2 naming each given Seat recorded u
 do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Run is over
   round=$1
   local r=$1 rv failed=0 pids=() i out=() swept=() keep=() p done_pid rst
-  local -A owner=()   # the pid of each Reviewer rloop started -> that Reviewer's name
+  local -A owner=() down=()   # pid -> the Reviewer rloop started; Reviewer -> its non-zero status
   err "run $run_n round $r: implementer"
   agent_cmd implementer "$(render "$implementer_tpl")"
   spawn implementer "$r" "" "$implementer_timeout" "$run_dir/implementer-$r.out" "$run_dir/implementer-$r.err" "${cmd[@]}"
@@ -435,9 +435,13 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     # AGT-15: this group's grace runs on its own, so the Reviewer that exits next is named and
     # signalled at once rather than a grace late. `reaped` below leaves every group empty.
     sweep "$done_pid" & swept+=("$done_pid")
-    [ "$rst" = 0 ] || { note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit $rst)"; failed=$((failed + 1)); }
+    [ "$rst" = 0 ] || { down[$rv]=$rst; failed=$((failed + 1)); }
   done
   [ ${#swept[@]} = 0 ] || reaped "${swept[@]}"
+  # RUN-15: the notes go on once every group is empty. `spawn` opens a Feedback File without
+  # O_APPEND, so a straggler shares its Reviewer's file offset; a note appended while that group
+  # still lived would land at the offset, and the straggler's next write would erase the line.
+  for rv in "${!down[@]}"; do note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit ${down[$rv]})"; done
   checkpoint "$r"
   refuse manager
   [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
