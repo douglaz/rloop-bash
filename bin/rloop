@@ -19,7 +19,7 @@ Do this now:
    - If the task turns on a point the repository's specifications or instructions leave ambiguous or contradictory — two readings that lead to different behaviour — do not choose a reading. That clarification is the specification owner's to make: stop here and write {{FINISHED_FILE}} with `STATUS: blocked`, and below it the document, the passage, the readings, and the clarification you recommend.
    - If the task needs an implementation decision the specifications leave to the implementer — a choice of how, not of what — do not make it alone. Put the question and the options to every adviser — fable, opus, astra and sol — except those this prompt lists below as unable to answer now: skip those, and no other. The four commands, run in this repository, are exactly:
      claude -p "<your question>" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
-     claude -p "<your question>" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
+     claude -p "<your question>" --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
      codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "<your question>"
      codex exec -s read-only -m gpt-6-sol -c model_reasoning_effort=xhigh "<your question>"
      Before calling any adviser, choose each call's maximum duration of at least 600 seconds (a call that answers sooner ends sooner), leaving enough of your turn to write whichever file the outcome needs — {{TASK_FILE}} if you settle the choice, {{FINISHED_FILE}} if you block. Then start all the calls together, inside one foreground command that returns only when every call has completed or been terminated. Use your shell tool to bound every call through completion or termination; a tool returning while an adviser still runs is not completion. Two distinct models must answer; one answer does not settle it. An answer is a call that finishes within its bound, exits zero and takes a position on the question. A timeout, non-zero exit, empty output, output that is only an error, a refusal, or prose that takes no position is not an answer; judge whether hedged prose takes a position. Once every call has ended, the unique leading position held by at least two answering advisers settles the choice: choose it. Any tie, or fewer than two answers, leaves the choice unsettled. Two answers hold the same position when they make the same concrete choice, material conditions included, whatever their reasons; whether they do is yours to judge. If neither model of one vendor answered and the other vendor's two agree, the choice settles: say in the record that the Consultation was single-vendor. If the settling position is held by one vendor's answers only while the other vendor answered and dissented, the choice settles too: say so in the record. Record the chosen durations, bounds used and each call's elapsed time, every model called and what it did — answered, did not answer with the reason, or refused — with the question and the answers — in the brief with the choice you settled, or in {{FINISHED_FILE}} with your recommendation if you block. Record there too each adviser you skipped because this prompt lists it below as unable to answer now, as one that did not answer because its model was out of quota when rloop checked. If the advisers leave the choice unsettled, stop and write {{FINISHED_FILE}} with `STATUS: blocked`, with the question, every answer and what you recommend; name the models that did not answer and say whether those that did answer agreed. Silence is not disagreement, and neither one is a clarification of the specifications. A choice the brief does not need to settle is the Implementer's to make.
@@ -49,7 +49,7 @@ Review the implementation yourself, then read the feedback. Feedback is advice, 
 
 Two kinds of question are not yours to answer alone. If this Round surfaced a point the repository's specifications or instructions leave ambiguous or contradictory — two readings that lead to different behaviour — do not choose a reading: choose A below with `STATUS: blocked`, and put the document, the passage, the readings and the clarification you recommend in the report. If it surfaced an implementation decision the specifications leave to the implementer — a choice of how, not of what — that the next brief must settle, before writing it, put the question and the options to every adviser — fable, opus, astra and sol — except those for which a `REVIEWER NOT RUN` file of this Round shows the model could not answer: skip those, and no other. Nothing earlier in this Run excludes an adviser: call again one that did not answer, or that you skipped, in an earlier Consultation. Run the four commands in this repository exactly as follows:
 claude -p "<your question>" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
-claude -p "<your question>" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
+claude -p "<your question>" --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)"
 codex exec -s read-only -m gpt-6-astra -c model_reasoning_effort=high "<your question>"
 codex exec -s read-only -m gpt-6-sol -c model_reasoning_effort=xhigh "<your question>"
 Before any adviser call, set a maximum duration of at least 600 seconds for each call (a call that answers sooner ends sooner), leaving enough of your turn to write whichever file the outcome needs — {{TASK_FILE}} if you settle the choice, {{FINISHED_FILE}} if you block. Then start all the calls together, inside one foreground command that returns only when every call has completed or been terminated. Enforce each bound through your shell tool until the call completes or is terminated; a shell tool that returns while an adviser is still running has not completed that adviser call. Do not settle the choice with only one answer: two distinct models must answer. Count a call only when it finishes within its bound, exits zero and states a position. Timeouts, non-zero exits, empty output, output consisting only of an error, refusals and prose with no position are not answers; whether hedged prose states a position is your judgment. Once every call has ended, the unique leading position held by at least two answering advisers settles the choice: choose it. Any tie, or fewer than two answers, leaves the choice unsettled. Two answers hold the same position when they make the same concrete choice, material conditions included, whatever their reasons; whether they do is your judgment. When neither model of one vendor answered and the other vendor's two agree, the choice settles, and the record must say the Consultation was single-vendor. When the settling position is held by one vendor's answers only while the other vendor answered and dissented, the choice settles too, and the record must say so. Record the chosen durations, the bounds used and elapsed time for each call, every model you called and whether it answered, did not answer (and why), or refused, together with the question and all answers — in the next brief with the choice you settled, or in {{FINISHED_FILE}} with your recommendation when you block. Record there too each adviser you skipped because a `REVIEWER NOT RUN` file shows its model could not answer, as one that did not answer for that reason. When the advisers leave the choice unsettled, choose A below with `STATUS: blocked`, giving the question, every answer and your recommendation; name the models that did not answer and say whether those that did answer agreed. Silence is not disagreement, and neither one is a clarification of the specifications.
@@ -92,21 +92,21 @@ agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt>
   case $1 in
     pick)
       case $manager in
-        claude) cmd=(claude -p "$2" --session-id "$sid" --model "$manager_model" --effort high --dangerously-skip-permissions) ;;
+        claude) cmd=(claude -p "$2" --session-id "$sid" --model "$manager_model" --effort xhigh --dangerously-skip-permissions) ;;
         codex) cmd=(codex exec --json --dangerously-bypass-approvals-and-sandbox -m "$manager_model" -c model_reasoning_effort=high "$2") ;;
       esac ;;
     judge)
       case $manager in
-        claude) cmd=(claude -p "$2" --resume "$sid" --model "$manager_model" --effort high --dangerously-skip-permissions) ;;
+        claude) cmd=(claude -p "$2" --resume "$sid" --model "$manager_model" --effort xhigh --dangerously-skip-permissions) ;;
         codex) cmd=(codex exec resume --dangerously-bypass-approvals-and-sandbox -m "$manager_model" -c model_reasoning_effort=high "$sid" "$2") ;;
       esac ;;
     implementer)
       case $implementer in
-        claude) cmd=(claude -p "$2" --model "$implementer_model" --dangerously-skip-permissions) ;;
-        codex) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m "$implementer_model" "$2") ;;
+        claude) cmd=(claude -p "$2" --model "$implementer_model" --effort high --dangerously-skip-permissions) ;;
+        codex) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m "$implementer_model" -c model_reasoning_effort=high "$2") ;;
       esac ;;
     fable) cmd=(claude -p "$2" --model claude-fable-5-1 --effort high --dangerously-skip-permissions --disallowedTools "$deny") ;;
-    opus) cmd=(claude -p "$2" --model claude-opus-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
+    opus) cmd=(claude -p "$2" --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions --disallowedTools "$deny") ;;
     astra) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
     sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-sol -c model_reasoning_effort=xhigh "$2") ;;
     probe) cmd=(claude -p "/usage") ;;
@@ -143,8 +143,8 @@ number() { # number <flag> <value> <minimum> -> num, the value in base ten (AGT-
   num=$((10#$2))
 }
 
-auto=0 manager=claude implementer=claude manager_model=claude-fable-5-1 manager_model_given=0
-implementer_model=claude-fable-5-1 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
+auto=0 manager=claude implementer=claude manager_model=claude-opus-5-5 manager_model_given=0
+implementer_model=claude-opus-5-5 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
 manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
 inline=0        # the value came from --flag=value, so AGT-2's "next argument begins with --" test does not apply to it
 while [ $# -gt 0 ]; do
@@ -182,7 +182,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ "$manager_model_given" = 0 ] && [ "$manager" = codex ]; then manager_model=gpt-6-astra; fi
-if [ "$implementer_model_given" = 0 ] && [ "$implementer" = codex ]; then implementer_model=gpt-6-astra; fi
+if [ "$implementer_model_given" = 0 ] && [ "$implementer" = codex ]; then implementer_model=gpt-6-sol; fi
 for arg in "$@"; do [ "$have_instruction" = 0 ] || die "more than one INSTRUCTION"; instruction=$arg; have_instruction=1; done
 # SEQ-3 forbids the combination of options, so the test is of each option's presence, not its value.
 if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "${have_run_dir:-}" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
@@ -351,42 +351,59 @@ checkpoint() { # checkpoint <round> (DIR-6)
   fi
 }
 
-# RUN-21: read the probe's output and record one verdict per Seat, from that Seat's own model.
-# Fail open -- only a zero exit and a line *beginning* `Current week (<family>): 100% used` reads
-# `unavailable`; a model off the table (every codex one) has no family and is always `unknown`.
-# Matched in the shell, not with grep or sed: neither is on the PATH flake.nix builds, and a
-# missing one would read every Seat `unknown` without saying so. The case glob is anchored
-# at the start of the line, which is what RUN-21 requires, and each NUL byte becomes SOH before
-# the read, which drops one silently: a NUL-split line does not begin with RUN-21's prefix.
+# RUN-21: family exhaustion follows the model, while session exhaustion follows the CLI preset.
+# Both need a successful Probe. Match anchored prefixes in Bash, since grep and sed are not on the
+# wrapped PATH. Turn NUL into SOH before read, which otherwise silently drops it and can join a
+# split prefix into a false match. The raw Probe capture stays untouched.
 is_unavailable() { case $unavail in *" $1 "*) return 0 ;; esac; return 1; }
+session_exhausted() { # session_exhausted <pick|round> <decimal digits>
+  local digits=$2
+  while [ "${#digits}" -gt 1 ] && [ "${digits:0:1}" = 0 ]; do digits=${digits:1}; done
+  if [ "$1" = pick ]; then [ "${#digits}" -gt 2 ] || [[ $digits == 9? ]]
+  else [ "$digits" = 100 ]; fi
+}
 probe_verdicts() { # probe_verdicts <pick|round> <probe exit status> -> unavail, space-delimited; line_<seat>
-  local r=$1 pst=$2 seat model key fam line hit
+  local r=$1 pst=$2 seat model cli key fam line family_line session_line hit reason
+  local session_re='^Current session: ([0-9]+)% used'
   unavail=' '
   : > "$run_dir/probe-$r.md"
   for seat in manager implementer fable opus astra sol; do
-    # A Reviewer is keyed by its name (its command line fixes its model); the Manager and the
-    # Implementer by their models, which take a Reviewer's name only on that Reviewer's model.
-    model='' key=$seat
-    case $seat in manager) model=$manager_model ;; implementer) model=$implementer_model ;; esac
-    case $model in claude-fable-5-1) key=fable ;; claude-opus-5) key=opus ;; esac
+    model='' key=$seat cli=codex
+    case $seat in
+      manager) model=$manager_model cli=$manager ;;
+      implementer) model=$implementer_model cli=$implementer ;;
+      fable|opus) cli=claude ;;
+    esac
+    case $model in claude-fable-5-1) key=fable ;; claude-opus-5-5) key=opus ;; esac
     case $key in fable) fam=Fable ;; opus) fam=Opus ;; *) fam='' ;; esac
-    hit=''
-    if [ "$pst" = 0 ] && [ -n "$fam" ] && [ -f "$run_dir/probe-$r.out" ]; then
+    family_line='' session_line=''
+    if [ "$pst" = 0 ] && [ -n "$fam" ] && [ -f "$run_dir/probe-$r.out" ] && [ -r "$run_dir/probe-$r.out" ]; then
       while IFS= read -r line || [ -n "$line" ]; do
-        case $line in "Current week ($fam): 100% used"*) hit=$line; break ;; esac
+        case $line in "Current week ($fam): 100% used"*) family_line=$line ;; esac
       done < <(tr '\0' '\1' < "$run_dir/probe-$r.out")
     fi
+    if [ "$pst" = 0 ] && [ "$cli" = claude ] && [ -f "$run_dir/probe-$r.out" ] && [ -r "$run_dir/probe-$r.out" ]; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        if [[ $line =~ $session_re ]] && session_exhausted "$r" "${BASH_REMATCH[1]}"; then
+          session_line=$line
+        fi
+      done < <(tr '\0' '\1' < "$run_dir/probe-$r.out")
+    fi
+    hit=$family_line reason=family
+    if [ -n "$session_line" ]; then hit=$session_line reason=session; fi
     if [ -n "$hit" ]; then unavail="$unavail$seat "; printf -v "line_$seat" '%s' "$hit"; echo "$seat:unavailable" >> "$run_dir/probe-$r.md"
+      printf -v "reason_$seat" '%s' "$reason"
     else echo "$seat:unknown" >> "$run_dir/probe-$r.md"; fi
   done
 }
 
 refuse() { # refuse <seat...> (RUN-22): exit 2 naming each given Seat recorded unavailable, its model and the probe's line
-  local s m l n=0
+  local s m l reason flag n=0
   for s; do
     is_unavailable "$s" || continue
-    m=${s}_model l=line_$s n=1
-    err "Seat $s cannot answer: model ${!m} is out of quota — ${!l}; pass --$s-model to choose another"
+    m=${s}_model l=line_$s reason=reason_$s n=1
+    if [ "${!reason}" = session ]; then flag="--$s codex"; else flag="--$s-model"; fi
+    err "Seat $s cannot answer: model ${!m} is out of quota — ${!l}; pass $flag to choose another"
   done
   [ "$n" = 0 ] || end_run 2
 }
