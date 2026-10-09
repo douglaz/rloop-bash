@@ -129,7 +129,7 @@ rloop [OPTIONS] [INSTRUCTION]
   --max-runs N                 Runs per Sequence                               (default: 20)
   --manager-timeout SECONDS    per Manager call                                (default: 3600)
   --implementer-timeout SECONDS  per Implementer call                          (default: 14400)
-  --reviewer-timeout SECONDS   per Reviewer call                               (default: 1800)
+  --reviewer-timeout SECONDS   per Reviewer call                               (default: 3600)
   --probe-timeout SECONDS      the availability probe's bound (RUN-21)         (default: 60)
   --kill-after SECONDS         SIGTERM-to-SIGKILL grace                        (default: 10)
   --version                    print the Implementation's version and exit 0
@@ -145,7 +145,7 @@ number() { # number <flag> <value> <minimum> -> num, the value in base ten (AGT-
 
 auto=0 manager=claude implementer=claude manager_model=claude-opus-5-5 manager_model_given=0
 implementer_model=claude-opus-5-5 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
-manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=1800 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
+manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=3600 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
 inline=0        # the value came from --flag=value, so AGT-2's "next argument begins with --" test does not apply to it
 while [ $# -gt 0 ]; do
   case $1 in
