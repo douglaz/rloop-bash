@@ -38,12 +38,14 @@ D=/var/tmp/rloop-units/myrepo-$(date -u +%m%dT%H%M); mkdir -p "$D"
 systemd-run --user --unit=rloop-myrepo --collect --expand-environment=no \
   --working-directory="$PWD" -E PATH -p KillMode=mixed -p TimeoutStopSec=120 \
   -p "StandardOutput=file:$D/out" -p "StandardError=file:$D/err" \
-  -p "ExecStopPost=/bin/sh -c 'echo \$\$SERVICE_RESULT \$\$EXIT_CODE \$\$EXIT_STATUS > $D/exit'" \
+  -p "ExecStopPost=/bin/sh -c 'printenv SERVICE_RESULT EXIT_CODE EXIT_STATUS | xargs > $D/exit'" \
   "$R" --auto
 ```
 
 - `$D/err` is the progress, `$D/out` the Finished File, and `$D/exit` the outcome, for example
-  `exit-code exited 1`.
+  `exit-code exited 1`. The stop command holds no `$` on purpose: systemd saves a transient
+  unit's `$$` as `$$$$`, so after a `daemon-reload` or re-exec of the user manager (which
+  `nixos-rebuild switch` does) an escaped `$$VAR` expands to the shell's PID instead.
 - `-E PATH` passes your `PATH`, so `claude` and `codex` resolve as they do in your shell.
   `--expand-environment=no` keeps a `$` in the instruction literal; avoid `%`, which systemd reads
   as a specifier.
