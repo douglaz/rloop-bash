@@ -37,6 +37,7 @@ R=$(nix build --refresh --no-link --print-out-paths github:douglaz/rloop-bash)/b
 D=/var/tmp/rloop-units/myrepo-$(date -u +%m%dT%H%M); mkdir -p "$D"
 systemd-run --user --unit=rloop-myrepo --collect --expand-environment=no \
   --working-directory="$PWD" -E PATH -p KillMode=mixed -p TimeoutStopSec=120 \
+  -p MemoryMax=16G -p MemorySwapMax=0 -p OOMPolicy=continue \
   -p "StandardOutput=file:$D/out" -p "StandardError=file:$D/err" \
   -p "ExecStopPost=/bin/sh -c 'printenv SERVICE_RESULT EXIT_CODE EXIT_STATUS | xargs > $D/exit'" \
   "$R" --auto
@@ -46,6 +47,11 @@ systemd-run --user --unit=rloop-myrepo --collect --expand-environment=no \
   `exit-code exited 1`. The stop command holds no `$` on purpose: systemd saves a transient
   unit's `$$` as `$$$$`, so after a `daemon-reload` or re-exec of the user manager (which
   `nixos-rebuild switch` does) an escaped `$$VAR` expands to the shell's PID instead.
+- `MemoryMax` and `MemorySwapMax=0` bound everything the Run starts: the agents and every build
+  and test they run. Without a bound one runaway command can exhaust the host, and the kernel's
+  OOM killer picks its victim by `oom_score`, which is often some other program. Size the bound
+  to the host. `OOMPolicy=continue` keeps the Run going when the kernel kills one process inside
+  the bound, normally the runaway one.
 - `-E PATH` passes your `PATH`, so `claude` and `codex` resolve as they do in your shell.
   `--expand-environment=no` keeps a `$` in the instruction literal; avoid `%`, which systemd reads
   as a specifier.
