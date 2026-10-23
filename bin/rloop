@@ -133,6 +133,8 @@ rloop [OPTIONS] [INSTRUCTION]
   --implementer-timeout SECONDS  per Implementer call                          (default: 14400)
   --reviewer-timeout SECONDS   per Reviewer call                               (default: 3600)
   --probe-timeout SECONDS      the availability probe's bound (RUN-21)         (default: 60)
+  --quota-wait SECONDS         shared Round sleep budget (RUN-24)              (default: 18000)
+  --quota-poll SECONDS         interval between quota re-checks                (default: 300)
   --kill-after SECONDS         SIGTERM-to-SIGKILL grace                        (default: 10)
   --version                    print the Implementation's version and exit 0
   --help                       print this usage and exit 0
@@ -148,6 +150,7 @@ number() { # number <flag> <value> <minimum> -> num, the value in base ten (AGT-
 auto=0 manager=claude implementer=codex manager_model=claude-opus-5-5 manager_model_given=0
 implementer_model=claude-opus-5-5 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
 manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=3600 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
+quota_wait=18000 quota_poll=300
 inline=0        # the value came from --flag=value, so AGT-2's "next argument begins with --" test does not apply to it
 while [ $# -gt 0 ]; do
   case $1 in
@@ -158,7 +161,7 @@ while [ $# -gt 0 ]; do
     # names no flag AGT-1 defines.
     --auto=*|--help=*|--version=*|--=*) die "unknown option $1" ;;
     --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}"; inline=1 ;;
-    --manager|--implementer|--manager-model|--implementer-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--probe-timeout|--kill-after)
+    --manager|--implementer|--manager-model|--implementer-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--probe-timeout|--quota-wait|--quota-poll|--kill-after)
       # AGT-2: the value is missing when the option is last or the next argument begins with `--`.
       if [ $# -lt 2 ] || { [ "$inline" = 0 ] && [ "${2#--}" != "$2" ]; }; then die "$1 needs a value"; fi
       inline=0
@@ -175,6 +178,8 @@ while [ $# -gt 0 ]; do
         --implementer-timeout) number "$1" "$2" 1; implementer_timeout=$num ;;
         --reviewer-timeout) number "$1" "$2" 1; reviewer_timeout=$num ;;
         --probe-timeout) number "$1" "$2" 1; probe_timeout=$num ;;
+        --quota-wait) number "$1" "$2" 1; quota_wait=$num ;;
+        --quota-poll) number "$1" "$2" 1; quota_poll=$num ;;
         --kill-after) number "$1" "$2" 1; kill_after=$num ;;
       esac
       shift 2 ;;
@@ -196,11 +201,12 @@ toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git w
 
 # --- agents: spawning, timeouts, signals (AGT-12 to AGT-16) ------------------------------------------
 live=()          # process groups of running agents (the pid of each agent's `timeout`, its group leader)
-interrupted=0
+interrupted=0 sleep_pid=''
 on_signal() {
   if [ "$interrupted" = 1 ]; then [ ${#live[@]} = 0 ] || kill -KILL -- "${live[@]/#/-}" 2>/dev/null; return; fi
   interrupted=1
   err "interrupted"
+  [ -z "$sleep_pid" ] || kill -TERM "$sleep_pid" 2>/dev/null
   [ ${#live[@]} = 0 ] || kill -TERM -- "${live[@]/#/-}" 2>/dev/null
 }
 trap on_signal INT TERM
@@ -240,11 +246,12 @@ sweep() { # sweep <group> (AGT-15): SIGTERM, up to --kill-after for the group to
   done
 }
 
-reap() { # reap <pid> -> st, the call's exit status (non-zero on a timeout)
+reap() { # reap <pid> -> st (exit status), reap_end (exit time before group cleanup)
   while :; do
     wait "$1"; st=$?
     kill -0 "$1" 2>/dev/null || break   # still alive: the wait was interrupted by a signal
   done
+  reap_end=$EPOCHSECONDS
   reaped "$1"
 }
 
@@ -364,8 +371,8 @@ session_exhausted() { # session_exhausted <pick|round> <decimal digits>
   if [ "$1" = pick ]; then [ "${#digits}" -gt 2 ] || [[ $digits == 9? ]]
   else [ "$digits" = 100 ]; fi
 }
-probe_verdicts() { # probe_verdicts <pick|round> <probe exit status> -> unavail, space-delimited; line_<seat>
-  local r=$1 pst=$2 seat model cli key fam line family_line session_line hit reason
+probe_verdicts() { # probe_verdicts <pick|check name> <probe exit status> -> unavail; line_<seat>, family_<seat>, reason_<seat>
+  local r=$1 pst=$2 seat model cli key fam line family_line hit reason match
   local session_re='^Current session: ([0-9]+)% used'
   unavail=' '
   : > "$run_dir/probe-$r.md"
@@ -378,21 +385,20 @@ probe_verdicts() { # probe_verdicts <pick|round> <probe exit status> -> unavail,
     esac
     case $model in claude-fable-5-1) key=fable ;; claude-opus-5-5) key=opus ;; esac
     case $key in fable) fam=Fable ;; opus) fam=Opus ;; *) fam='' ;; esac
-    family_line='' session_line=''
-    if [ "$pst" = 0 ] && [ -n "$fam" ] && [ -f "$run_dir/probe-$r.out" ] && [ -r "$run_dir/probe-$r.out" ]; then
+    family_line='' hit='' reason=family
+    if [ -f "$run_dir/probe-$r.out" ] && [ -r "$run_dir/probe-$r.out" ]; then
       while IFS= read -r line || [ -n "$line" ]; do
-        case $line in "Current week ($fam): 100% used"*) family_line=$line ;; esac
-      done < <(tr '\0' '\1' < "$run_dir/probe-$r.out")
-    fi
-    if [ "$pst" = 0 ] && [ "$cli" = claude ] && [ -f "$run_dir/probe-$r.out" ] && [ -r "$run_dir/probe-$r.out" ]; then
-      while IFS= read -r line || [ -n "$line" ]; do
-        if [[ $line =~ $session_re ]] && session_exhausted "$r" "${BASH_REMATCH[1]}"; then
-          session_line=$line
+        match=0
+        if [ "$pst" = 0 ] && [ -n "$fam" ]; then
+          case $line in "Current week ($fam): 100% used"*) family_line=$line; match=1 ;; esac
         fi
+        if [ "$pst" = 0 ] && [ "$cli" = claude ] && [[ $line =~ $session_re ]] && session_exhausted "$r" "${BASH_REMATCH[1]}"; then
+          reason=session match=1
+        fi
+        [ "$match" = 0 ] || hit+=${hit:+$'\n'}$line
       done < <(tr '\0' '\1' < "$run_dir/probe-$r.out")
     fi
-    hit=$family_line reason=family
-    if [ -n "$session_line" ]; then hit=$session_line reason=session; fi
+    printf -v "family_$seat" '%s' "$family_line"
     if [ -n "$hit" ]; then unavail="$unavail$seat "; printf -v "line_$seat" '%s' "$hit"; echo "$seat:unavailable" >> "$run_dir/probe-$r.md"
       printf -v "reason_$seat" '%s' "$reason"
     else echo "$seat:unknown" >> "$run_dir/probe-$r.md"; fi
@@ -410,9 +416,60 @@ refuse() { # refuse <seat...> (RUN-22): exit 2 naming each given Seat recorded u
   [ "$n" = 0 ] || end_run 2
 }
 
+quota_sleep() { # RUN-24: only requested sleeps spend the Round's shared budget
+  local secs=$quota_poll
+  [ "$remaining" -gt 0 ] || return 1
+  [ "$secs" -le "$remaining" ] || secs=$remaining
+  err "run $run_n round $round: waiting $secs seconds for session quota"
+  [ "$interrupted" = 0 ] || drain
+  sleep "$secs" &
+  sleep_pid=$!
+  # A signal between starting the sleep and recording its pid must also terminate it.
+  [ "$interrupted" = 0 ] || kill -TERM "$sleep_pid" 2>/dev/null
+  wait "$sleep_pid" 2>/dev/null
+  if [ "$interrupted" != 0 ]; then
+    kill -TERM "$sleep_pid" 2>/dev/null
+    wait "$sleep_pid" 2>/dev/null
+    sleep_pid=''
+    drain
+  fi
+  sleep_pid=''
+  remaining=$((remaining - secs))
+}
+
+round_check() { # round_check <panel|judge> -> latest numbered captures and verdicts
+  local site=$1 count
+  if [ "$site" = panel ]; then panel_n=$((panel_n + 1)); count=$panel_n
+  else judge_n=$((judge_n + 1)); count=$judge_n; fi
+  check_name=$round-$site-$count
+  agent_cmd probe
+  spawn probe "$round" "" "$probe_timeout" "$run_dir/probe-$check_name.out" "$run_dir/probe-$check_name.err" "${cmd[@]}"
+  reap "$pid"
+  probe_verdicts "$check_name" "$st"
+}
+
+quota_check() { # quota_check <panel|judge>: first check, then wait only on session exhaustion
+  round_check "$1"
+  while is_unavailable manager; do
+    [ -z "$family_manager" ] || return 1
+    quota_sleep || return 1
+    round_check "$1"
+  done
+}
+
+judge_cut() { # RUN-24: inspect the completed attempt's bytes, never a shell's copy of them
+  local out=$1 prefix="You've hit your session limit"
+  [ "$manager" = claude ] && [ "$judge_st" != 0 ] && [ "$judge_timed_out" = 0 ] || return 1
+  [ ! -e "$run_dir/finished.md" ] && cmp -s "$run_dir/task.md" "$run_dir/task-$round.md" || return 1
+  cmp -s <(printf '%s' "$prefix") <(head -c "${#prefix}" "$out") &&
+    [ "$(wc -l < "$out")" = 1 ] && cmp -s <(printf '\n') <(tail -c1 "$out")
+}
+
 do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Run is over
   round=$1
   local r=$1 rv failed=0 pids=() i out=() keep=() p done_pid rst
+  local remaining=$quota_wait panel_n=0 judge_n=0 check_name='' panel_expired=0 ext
+  local retry=0 attempt judge_st judge_timed_out judge_start
   local -A owner=() down=()   # pid -> the Reviewer rloop started; Reviewer -> its non-zero status
   err "run $run_n round $r: implementer"
   agent_cmd implementer "$(render "$implementer_tpl")"
@@ -420,11 +477,8 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
   reap "$pid"
   [ "$st" = 0 ] || note "$run_dir/implementer-$r.out" "IMPLEMENTER FAILED (exit $st)"
   checkpoint "$r"
-  err "run $run_n round $r: probe"
-  agent_cmd probe
-  spawn probe "$r" "" "$probe_timeout" "$run_dir/probe-$r.out" "$run_dir/probe-$r.err" "${cmd[@]}"
-  reap "$pid"
-  probe_verdicts "$r" "$st"
+  quota_check panel || panel_expired=1
+  for ext in out err md; do cp "$run_dir/probe-$check_name.$ext" "$run_dir/probe-$r.$ext" || die "cannot copy Panel check"; done
   err "run $run_n round $r: panel"
   for rv in fable opus astra sol; do
     if is_unavailable "$rv"; then
@@ -461,7 +515,7 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     [ "$rst" = 0 ] || { down[$rv]=$rst; failed=$((failed + 1)); }
   done
   # `live` is exactly this Panel's groups: every earlier call's went out of it in that call's own
-  # `reaped`, and no Reviewer spawned above has been reaped yet. A `spawn` added between the probe
+  # `reaped`, and no Reviewer spawned above has been reaped yet. A `spawn` added between the Panel-site check
   # and here without its `reap` would be swept while it still ran.
   reaped "${live[@]}"
   # RUN-15: the notes go on once every group is empty. `spawn` opens a Feedback File without
@@ -469,14 +523,34 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
   # still lived would land at the offset, and the straggler's next write would erase the line.
   for rv in "${!down[@]}"; do note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit ${down[$rv]})"; done
   checkpoint "$r"
-  refuse manager
+  [ "$panel_expired" = 0 ] || refuse manager
   [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
+  quota_check judge || refuse manager
   err "run $run_n round $r: judge"
   feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"
-  agent_cmd judge "$(render "$judge_tpl")"
-  spawn manager "$r" "" "$manager_timeout" "$run_dir/manager-judge-$r.out" "$run_dir/manager-judge-$r.err" "${cmd[@]}"
-  reap "$pid"
-  decide "$r" "$st"
+  while :; do
+    attempt=$run_dir/manager-judge-$r
+    [ "$retry" = 0 ] || attempt+=-retry-$retry
+    agent_cmd judge "$(render "$judge_tpl")"
+    judge_start=$EPOCHSECONDS
+    spawn manager "$r" "" "$manager_timeout" "$attempt.out" "$attempt.err" "${cmd[@]}"
+    reap "$pid"
+    judge_st=$st
+    judge_timed_out=0
+    # An agent can exit 124 or 137 itself; a timeout also has to reach the configured limit.
+    if { [ "$judge_st" = 124 ] || [ "$judge_st" = 137 ]; } && [ "$((reap_end - judge_start))" -ge "$manager_timeout" ]; then
+      judge_timed_out=1
+    fi
+    judge_cut "$attempt.out" || break
+    if ! quota_sleep; then
+      err "Seat manager cannot answer: model $manager_model; call's output:"
+      cat "$attempt.out" >&2
+      break
+    fi
+    quota_check judge || { refuse manager; break; }
+    retry=$((retry + 1))
+  done
+  decide "$r" "$judge_st"
 }
 
 run_once() { # one Run, number run_n; returns only when it ended done inside a Sequence
