@@ -3,6 +3,14 @@
 # One Manager picks a task and judges; fresh Implementers build; a four-model Panel reviews.
 set -u
 shopt -u patsub_replacement 2>/dev/null || true
+# An inherited SHELLOPTS reaches every call as the caller's bytes (AGT-13, CNF-10). Bash rebuilds
+# the variable it imported, and `set -u` adds nounset to it, so read this process's initial
+# environment instead. Linux only, as the flake's systems are; without /proc nothing changes.
+inherited_shellopts=()
+{ while IFS= read -r -d '' kv; do
+    case $kv in SHELLOPTS=*) inherited_shellopts=("$kv"); break ;; esac
+  done < "/proc/$$/environ"; } 2>/dev/null || :   # an inherited errexit must not end the Run here
+unset kv
 
 version=0.1.0
 
@@ -227,7 +235,7 @@ drain() { # drain [group...]: after an interruption, wait for every live group, 
 spawn() { # spawn <role> <round> <reviewer or ""> <timeout> <stdout file> <stderr file> <cmd...> -> pid
   local role=$1 round=$2 reviewer=$3 secs=$4 out=$5 errf=$6; shift 6
   [ "$interrupted" = 0 ] || drain
-  local envs=("RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
+  local envs=("${inherited_shellopts[@]}" "RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
   [ -z "$reviewer" ] || envs+=("RLOOP_REVIEWER=$reviewer")
   if [ "$role" = manager ] && [ "$manager" = claude ]; then
     envs+=("BASH_MAX_TIMEOUT_MS=$((manager_timeout * 1000))")
