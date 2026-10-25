@@ -6,11 +6,15 @@ shopt -u patsub_replacement 2>/dev/null || true
 # An inherited SHELLOPTS reaches every call as the caller's bytes (AGT-13, CNF-10). Bash rebuilds
 # the variable it imported, and `set -u` adds nounset to it, so read this process's initial
 # environment instead. Linux only, as the flake's systems are; without /proc nothing changes.
+# The scratch variable is local, so a caller's own exported `kv` reaches every call unchanged.
 inherited_shellopts=()
-{ while IFS= read -r -d '' kv; do
+read_inherited_shellopts() {
+  local kv
+  while IFS= read -r -d '' kv; do
     case $kv in SHELLOPTS=*) inherited_shellopts=("$kv"); break ;; esac
-  done < "/proc/$$/environ"; } 2>/dev/null || :   # an inherited errexit must not end the Run here
-unset kv
+  done < "/proc/$$/environ"
+}
+{ read_inherited_shellopts; } 2>/dev/null || :   # an inherited errexit must not end the Run here
 
 version=0.1.0
 
