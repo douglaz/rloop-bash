@@ -3,19 +3,6 @@
 # One Manager picks a task and judges; fresh Implementers build; a four-model Panel reviews.
 set -u
 shopt -u patsub_replacement 2>/dev/null || true
-# An inherited SHELLOPTS reaches every call as the caller's bytes (AGT-13, CNF-10). Bash rebuilds
-# the variable it imported, and `set -u` adds nounset to it, so read this process's initial
-# environment instead. Linux only, as the flake's systems are; without /proc nothing changes.
-# The scratch variable is local, so a caller's own exported `kv` reaches every call unchanged.
-inherited_shellopts=()
-read_inherited_shellopts() {
-  local kv
-  while IFS= read -r -d '' kv; do
-    case $kv in SHELLOPTS=*) inherited_shellopts=("$kv"); break ;; esac
-  done < "/proc/$$/environ"
-}
-{ read_inherited_shellopts; } 2>/dev/null || :   # an inherited errexit must not end the Run here
-
 version=0.1.0
 
 # --- prompts (03-prompts.md), byte for byte; rendered by literal {{NAME}} substitution -----------
@@ -239,12 +226,26 @@ drain() { # drain [group...]: after an interruption, wait for every live group, 
 spawn() { # spawn <role> <round> <reviewer or ""> <timeout> <stdout file> <stderr file> <cmd...> -> pid
   local role=$1 round=$2 reviewer=$3 secs=$4 out=$5 errf=$6; shift 6
   [ "$interrupted" = 0 ] || drain
-  local envs=("${inherited_shellopts[@]}" "RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
+  # Rebuild from the initial environment, not Bash's variables: locals and shared state can
+  # shadow caller exports, and Bash rebuilds SHELLOPTS. NUL-delimited reads preserve every byte.
+  # No storage name can collide with a caller export when exec -c clears the ambient environment.
+  local envs=() kv
+  while IFS= read -r -d '' kv; do
+    # Omit replaced values so even large caller entries travel only once.
+    case $kv in
+      PATH=*|RLOOP_ROLE=*|RLOOP_ROUND=*|RLOOP_RUN=*|RLOOP_RUN_DIR=*|RLOOP_REVIEWER=*) continue ;;
+      BASH_MAX_TIMEOUT_MS=*) [ "$role" != manager ] || [ "$manager" != claude ] || continue ;;
+    esac
+    envs+=("$kv")
+  done < "/proc/$$/environ" || die "cannot read the initial environment"
+  # Keep the wrapper's dependency PATH, with the caller's entries still first.
+  envs+=("PATH=$PATH" "RLOOP_ROLE=$role" "RLOOP_ROUND=$round" "RLOOP_RUN=$run_n" "RLOOP_RUN_DIR=$run_dir")
   [ -z "$reviewer" ] || envs+=("RLOOP_REVIEWER=$reviewer")
   if [ "$role" = manager ] && [ "$manager" = claude ]; then
     envs+=("BASH_MAX_TIMEOUT_MS=$((manager_timeout * 1000))")
   fi
-  env -u RLOOP_REVIEWER "${envs[@]}" timeout -k "$kill_after" "$secs" "$@" </dev/null >"$out" 2>"$errf" &
+  # Clear it before starting env, so large caller values travel only once, in env's arguments.
+  exec -c env -i -- "${envs[@]}" timeout -k "$kill_after" "$secs" "$@" </dev/null >"$out" 2>"$errf" &
   pid=$!
   live+=("$pid")
 }
@@ -263,7 +264,9 @@ reap() { # reap <pid> -> st (exit status), reap_end (exit time before group clea
     wait "$1"; st=$?
     kill -0 "$1" 2>/dev/null || break   # still alive: the wait was interrupted by a signal
   done
-  reap_end=$EPOCHSECONDS
+  # Linux uptime has two fractional digits; keep hundredths, before any group-cleanup time.
+  read -r reap_end _ < /proc/uptime || die "cannot read uptime"
+  reap_end=${reap_end/./}
   reaped "$1"
 }
 
@@ -544,13 +547,14 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     attempt=$run_dir/manager-judge-$r
     [ "$retry" = 0 ] || attempt+=-retry-$retry
     agent_cmd judge "$(render "$judge_tpl")"
-    judge_start=$EPOCHSECONDS
+    read -r judge_start _ < /proc/uptime || die "cannot read uptime"
+    judge_start=${judge_start/./}
     spawn manager "$r" "" "$manager_timeout" "$attempt.out" "$attempt.err" "${cmd[@]}"
     reap "$pid"
     judge_st=$st
     judge_timed_out=0
     # An agent can exit 124 or 137 itself; a timeout also has to reach the configured limit.
-    if { [ "$judge_st" = 124 ] || [ "$judge_st" = 137 ]; } && [ "$((reap_end - judge_start))" -ge "$manager_timeout" ]; then
+    if { [ "$judge_st" = 124 ] || [ "$judge_st" = 137 ]; } && [ "$((reap_end - judge_start))" -ge "$((manager_timeout * 100))" ]; then
       judge_timed_out=1
     fi
     judge_cut "$attempt.out" || break

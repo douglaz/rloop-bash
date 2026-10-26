@@ -28,7 +28,8 @@ CI runs `nix build`, the self-check and the Panel trace check on every push and 
 ### Hosting a long Run
 
 A Run often takes hours: one Implementer call alone may run for `--implementer-timeout`, four hours
-by default. In a terminal, run rloop in the foreground or in tmux. From an agent, or anywhere the
+by default. A Round may also spend up to `--quota-wait` seconds in shared quota sleeps; checks and calls can extend elapsed time.
+In a terminal, run rloop in the foreground or in tmux. From an agent, or anywhere the
 caller may go away, launch it as a transient systemd user unit. That has no runtime cap, outlives
 the caller and keeps the exit status:
 
