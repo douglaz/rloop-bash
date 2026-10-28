@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # rloop — the Bash Implementation of the rloop specification (spec/).
-# One Manager picks a task and judges; fresh Implementers build; a four-model Panel reviews.
+# One Manager picks a task and judges; fresh Implementers build; a five-model Panel reviews.
 set -u
 shopt -u patsub_replacement 2>/dev/null || true
 version=0.1.0
@@ -43,7 +43,7 @@ EOF
 judge_tpl=$(cat <<'EOF'
 Round {{ROUND}} of at most {{MAX_ROUNDS}} is over. An Implementer worked from {{TASK_FILE}}; its output is in {{IMPLEMENTER_LOG}} (a last line `IMPLEMENTER FAILED (exit N)` means it crashed or timed out). The Panel's Reviewers then read the repository's changes since commit {{BASE}} against the brief; their feedback is in:
 {{FEEDBACK_FILES}}
-A file holding `REVIEWER FAILED` is a Reviewer that crashed or timed out; one holding `REVIEWER NOT RUN` is a Reviewer that was never called, because its model could not answer. That model cannot answer as an adviser either: if this Round needs a Consultation, count it as a model that did not answer and do not call it. Files named `rejected-*` in {{RUN_DIR}}, if any, were written over your files by another agent and set aside; read them as evidence about that agent.
+A file holding `REVIEWER FAILED` is a Reviewer that crashed or timed out; one holding `REVIEWER NOT RUN` is a Reviewer that was never called, because its model could not answer. For fable, opus, astra and sol, that model cannot answer as an adviser either: if this Round needs a Consultation, count it as a model that did not answer and do not call it. Files named `rejected-*` in {{RUN_DIR}}, if any, were written over your files by another agent and set aside; read them as evidence about that agent.
 
 Review the implementation yourself, then read the feedback. Feedback is advice, not orders: send back only what makes the implementation fail the brief as written, or is a genuine defect. Reject findings that add scope, over-engineer, or ask for machinery the brief does not need. File an issue only for a finding that would change what the software does, what the repository's specifications require, or whether a check can catch a defect: a bug, a missing or contradictory requirement, a test or gate that cannot fail or fails for the wrong reason. Everything else — wording, phrasing, style, formatting, comment accuracy, prose tightening, duplicated explanation — is cosmetic and is never filed; a cheap cosmetic finding inside this Round's scope may be fixed in this Round, and otherwise is listed once in your report in {{FINISHED_FILE}} and dropped. A false statement inside a requirement is a requirement defect and may be filed; a false or imprecise code comment is cosmetic.
 
@@ -75,7 +75,7 @@ EOF
 )
 
 review_tpl=$(cat <<'EOF'
-You are one of four independent Reviewers of an rloop Round. Read the repository's instructions for agents if it has any. Read the brief at {{TASK_FILE}}. Then review the repository's changes since commit {{BASE}} — committed and uncommitted, tracked and untracked; use git to see them — against that brief. Ignore changes under .rloop/ and in issue-tracker files (.beads/ and the like).
+You are one of five independent Reviewers of an rloop Round. Read the repository's instructions for agents if it has any. Read the brief at {{TASK_FILE}}. Then review the repository's changes since commit {{BASE}} — committed and uncommitted, tracked and untracked; use git to see them — against that brief. Ignore changes under .rloop/ and in issue-tracker files (.beads/ and the like).
 
 Report, in Markdown, to the Manager who will judge this Round:
 0. What you could not do: any command this review needed that your sandbox refused or that failed before running (a build, a test suite, a gate), named up front, so the Manager knows what your verdict rests on. Say "I ran everything I needed" if that is true.
@@ -89,7 +89,7 @@ EOF
 
 # --- agent command lines (02-agents.md) ------------------------------------------------------------
 deny='Edit,Write,NotebookEdit,Bash(git checkout:*),Bash(git stash:*),Bash(git reset:*),Bash(git commit:*),Bash(git clean:*)'
-agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt> -> array cmd
+agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol|grok> <prompt> -> array cmd
   case $1 in
     pick)
       case $manager in
@@ -110,6 +110,7 @@ agent_cmd() { # agent_cmd <pick|judge|implementer|fable|opus|astra|sol> <prompt>
     opus) cmd=(claude -p "$2" --model claude-opus-5-5 --effort high --dangerously-skip-permissions --disallowedTools "$deny") ;;
     astra) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=high "$2") ;;
     sol) cmd=(codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh "$2") ;;
+    grok) cmd=(grok --no-auto-update -p "$2" --model grok-4.7 --effort high --output-format plain --always-approve --sandbox off --no-subagents --no-memory --disable-web-search --disallowed-tools "search_replace,write" --deny "Bash(git checkout:*)" --deny "Bash(git stash:*)" --deny "Bash(git reset:*)" --deny "Bash(git commit:*)" --deny "Bash(git clean:*)") ;;
     probe) cmd=(claude -p "/usage") ;;
   esac
 }
@@ -391,7 +392,7 @@ probe_verdicts() { # probe_verdicts <pick|check name> <probe exit status> -> una
   local session_re='^Current session: ([0-9]+)% used'
   unavail=' '
   : > "$run_dir/probe-$r.md"
-  for seat in manager implementer fable opus astra sol; do
+  for seat in manager implementer fable opus astra sol grok; do
     model='' key=$seat cli=codex
     case $seat in
       manager) model=$manager_model cli=$manager ;;
@@ -495,7 +496,7 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
   quota_check panel || panel_expired=1
   for ext in out err md; do cp "$run_dir/probe-$check_name.$ext" "$run_dir/probe-$r.$ext" || die "cannot copy Panel check"; done
   err "run $run_n round $r: panel"
-  for rv in fable opus astra sol; do
+  for rv in fable opus astra sol grok; do
     if is_unavailable "$rv"; then
       # RUN-15: not called, but still a Reviewer of the Panel. rloop writes the file in its place.
       echo "REVIEWER NOT RUN (unavailable)" > "$run_dir/feedback-$r-$rv.md"
@@ -509,7 +510,7 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
     pids+=("$pid")
   done
   i=0
-  for rv in fable opus astra sol; do
+  for rv in fable opus astra sol grok; do
     [ -z "${pids[$i]}" ] || { out+=("${pids[$i]}"); owner[${pids[$i]}]=$rv; }
     i=$((i + 1))
   done
@@ -539,10 +540,10 @@ do_round() { # do_round <round> (RUN-7); returns 0 for next Round, 1 when the Ru
   for rv in "${!down[@]}"; do note "$run_dir/feedback-$r-$rv.md" "REVIEWER FAILED (exit ${down[$rv]})"; done
   checkpoint "$r"
   [ "$panel_expired" = 0 ] || refuse manager
-  [ "$failed" -lt 4 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
+  [ "$failed" -lt 5 ] || { err "every Reviewer of the Panel is down"; end_run 2; }
   quota_check judge || refuse manager
   err "run $run_n round $r: judge"
-  feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"
+  feedback_files="$run_dir/feedback-$r-fable.md"$'\n'"$run_dir/feedback-$r-opus.md"$'\n'"$run_dir/feedback-$r-astra.md"$'\n'"$run_dir/feedback-$r-sol.md"$'\n'"$run_dir/feedback-$r-grok.md"
   while :; do
     attempt=$run_dir/manager-judge-$r
     [ "$retry" = 0 ] || attempt+=-retry-$retry

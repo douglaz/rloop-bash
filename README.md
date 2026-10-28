@@ -1,7 +1,7 @@
 # rloop-bash
 
 The Bash Implementation of [rloop](https://github.com/douglaz/rloop-spec): one long-lived Manager
-agent picks a task, briefs disposable Implementers and a four-model review Panel, and judges the
+agent picks a task, briefs disposable Implementers and a five-model review Panel, and judges the
 result, Round after Round, until it writes the Finished File. The specification is the `spec/`
 submodule and is authoritative; this repository holds only `bin/rloop` and the build.
 
@@ -25,18 +25,25 @@ CI runs `nix build`, the self-check and the Panel trace check on every push and 
 
 `rloop --help` lists the options.
 
+Claude Code, Codex and the official Grok Build CLI must already be installed and authenticated.
+Grok inherits its established CLI authentication. The fixed Panel is `fable`, `opus`, `astra`,
+`sol`, `grok`.
+
 ### Hosting a long Run
 
 A Run often takes hours: one Implementer call alone may run for `--implementer-timeout`, four hours
 by default. A Round may also spend up to `--quota-wait` seconds in shared quota sleeps; checks and calls can extend elapsed time.
 In a terminal, run rloop in the foreground or in tmux. From an agent, or anywhere the
 caller may go away, launch it as a transient systemd user unit. That has no runtime cap, outlives
-the caller and keeps the exit status:
+the caller and keeps the exit status. Set `U` to a stable transient-unit name for this checkout
+before running the recipe:
 
 ```sh
 R=$(nix build --refresh --no-link --print-out-paths github:douglaz/rloop-bash)/bin/rloop
-D=/var/tmp/rloop-units/myrepo-$(date -u +%m%dT%H%M); mkdir -p "$D"
-systemd-run --user --unit=rloop-myrepo --collect --expand-environment=no \
+: "${U:?set U to a stable name for this checkout}"
+D="${XDG_STATE_HOME:-$HOME/.local/state}/rloop/$(date -u +%Y%m%dT%H%M%S.%N)"
+mkdir -p "$D"
+systemd-run --user --unit="$U" --collect --expand-environment=no \
   --working-directory="$PWD" -E PATH -p KillMode=mixed -p TimeoutStopSec=120 \
   -p MemoryMax=16G -p MemorySwapMax=0 -p OOMPolicy=continue \
   -p "StandardOutput=file:$D/out" -p "StandardError=file:$D/err" \
@@ -53,12 +60,12 @@ systemd-run --user --unit=rloop-myrepo --collect --expand-environment=no \
   OOM killer picks its victim by `oom_score`, which is often some other program. Size the bound
   to the host. `OOMPolicy=continue` keeps the Run going when the kernel kills one process inside
   the bound, normally the runaway one.
-- `-E PATH` passes your `PATH`, so `claude` and `codex` resolve as they do in your shell.
+- `-E PATH` passes your `PATH`, so `claude`, `codex` and `grok` resolve as they do in your shell.
   `--expand-environment=no` keeps a `$` in the instruction literal; avoid `%`, which systemd reads
   as a specifier.
-- rloop is the unit's main process, so `systemctl --user stop rloop-myrepo` sends SIGTERM to rloop
+- rloop is the unit's main process, so `systemctl --user stop "$U"` sends SIGTERM to rloop
   alone: it reaps its agents and exits 2 with `interrupted`. A task the Manager claimed stays
-  claimed. The fixed unit name refuses a second Run in the same repository.
+  claimed. Reusing the same `$U` refuses a second Run while the first is active.
 - The unit outlives your login only with `loginctl enable-linger $USER`, and no transient unit
   survives a reboot: a missing `exit` file means unknown, not success.
 - Do not host a Run in an agent tool's background facility, which stops it at the tool's own
