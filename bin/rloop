@@ -57,7 +57,7 @@ Before any adviser call, set a maximum duration of at least 600 seconds for each
 
 Then do exactly one of:
 
-A. The task is done, or cannot be completed, or needs a clarification of the specifications. File only the follow-up issues the rule above says to file; close the task in the tracker if it has one. Make sure the accepted work is in history and the tree is clean: commit what is not yet committed, tracker files included, following the repository's commit conventions — no tool or assistant attribution, no squashing or rewriting of history, no empty commit. Never edit code to get a commit past a hook or signing, and never bypass either: if a commit needs a code change, that is a finding — choose B instead. Do not commit work you did not accept. These paths were already modified or untracked before this Run started and are not yours to commit:
+A. The task is done, or cannot be completed, or needs a clarification of the specifications. File only the follow-up issues the rule above says to file; {{TRACKER_CLOSE}}. Make sure the accepted work is in history and the tree is clean: commit what is not yet committed, tracker files included, following the repository's commit conventions — no tool or assistant attribution, no squashing or rewriting of history, no empty commit. Never edit code to get a commit past a hook or signing, and never bypass either: if a commit needs a code change, that is a finding — choose B instead. Do not commit work you did not accept. These paths were already modified or untracked before this Run started and are not yours to commit:
 {{DIRTY_AT_START}}
 Then write {{FINISHED_FILE}} with a first line of exactly `STATUS: done` or exactly `STATUS: blocked`, followed by your report: what was done; what is committed and what is left in the tree; the base commit {{BASE}} and the commit HEAD names now; your notes and questions for whoever started this Run.
 
@@ -127,6 +127,7 @@ rloop [OPTIONS] [INSTRUCTION]
   --implementer-model MODEL    the Implementer's model                   (default: the preset's, AGT-5)
   --base REF                   the ref Reviewers diff against                  (default: HEAD at start)
   --run-dir PATH               the Run Directory, which must not exist yet     (default: DIR-2)
+  --no-close                   tell the judge to leave the task open in the tracker (PRM-6)
   --max-rounds N               Rounds per Run                                  (default: 10)
   --max-runs N                 Runs per Sequence                               (default: 20)
   --manager-timeout SECONDS    per Manager call                                (default: 3600)
@@ -147,7 +148,7 @@ number() { # number <flag> <value> <minimum> -> num, the value in base ten (AGT-
   num=$((10#$2))
 }
 
-auto=0 manager=claude implementer=codex manager_model=claude-opus-5-5 manager_model_given=0
+auto=0 no_close=0 manager=claude implementer=codex manager_model=claude-opus-5-5 manager_model_given=0
 implementer_model=claude-opus-5-5 implementer_model_given=0 base_ref=HEAD run_dir='' max_rounds=10 max_runs=20
 manager_timeout=3600 implementer_timeout=14400 reviewer_timeout=3600 probe_timeout=60 kill_after=10 instruction='' have_instruction=0
 quota_wait=18000 quota_poll=300
@@ -155,11 +156,12 @@ inline=0        # the value came from --flag=value, so AGT-2's "next argument be
 while [ $# -gt 0 ]; do
   case $1 in
     --auto) auto=1; shift ;;
+    --no-close) no_close=1; shift ;;
     --version) echo "rloop-bash $version"; exit 0 ;;
     --help) usage; exit 0 ;;
     # AGT-2: a value given with `=` to a flag that takes none is an unknown option, and `--=x`
     # names no flag AGT-1 defines.
-    --auto=*|--help=*|--version=*|--=*) die "unknown option $1" ;;
+    --auto=*|--no-close=*|--help=*|--version=*|--=*) die "unknown option $1" ;;
     --*=*) set -- "${1%%=*}" "${1#*=}" "${@:2}"; inline=1 ;;
     --manager|--implementer|--manager-model|--implementer-model|--base|--run-dir|--max-rounds|--max-runs|--manager-timeout|--implementer-timeout|--reviewer-timeout|--probe-timeout|--quota-wait|--quota-poll|--kill-after)
       # AGT-2: the value is missing when the option is last or the next argument begins with `--`.
@@ -193,6 +195,9 @@ if [ "$implementer_model_given" = 0 ] && [ "$implementer" = codex ]; then implem
 for arg in "$@"; do [ "$have_instruction" = 0 ] || die "more than one INSTRUCTION"; instruction=$arg; have_instruction=1; done
 # SEQ-3 forbids the combination of options, so the test is of each option's presence, not its value.
 if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "${have_run_dir:-}" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
+if [ "$auto" = 1 ] && [ "$no_close" = 1 ]; then die "--auto cannot be combined with --no-close"; fi
+tracker_close='close the task in the tracker if it has one'
+if [ "$no_close" = 1 ]; then tracker_close="do not close the task in the tracker, and reopen it if this Run's work closed it: whoever started this Run closes it after reviewing this Run's commits"; fi
 case $run_dir in ''|/*) ;; *) run_dir=$PWD/$run_dir ;; esac
 
 # --- the tree (RUN-1) ------------------------------------------------------------------------------
@@ -319,6 +324,7 @@ render() { # render <template> -> stdout, by PRM-6
       FEEDBACK_FILES) out+="$feedback_files" ;;
       DIRTY_AT_START) out+="$dirty" ;;
       UNAVAILABLE) out+="$unavailable" ;;
+      TRACKER_CLOSE) out+="$tracker_close" ;;
       *) out+='{{'; t=$rest; continue ;;
     esac
     t=${rest#*'}}'}
