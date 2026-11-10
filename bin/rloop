@@ -197,7 +197,7 @@ for arg in "$@"; do [ "$have_instruction" = 0 ] || die "more than one INSTRUCTIO
 if [ "$auto" = 1 ] && { [ -n "${have_base:-}" ] || [ -n "${have_run_dir:-}" ]; }; then die "--auto cannot be combined with --base or --run-dir"; fi
 if [ "$auto" = 1 ] && [ "$no_close" = 1 ]; then die "--auto cannot be combined with --no-close"; fi
 tracker_close='close the task in the tracker if it has one'
-if [ "$no_close" = 1 ]; then tracker_close="do not close the task in the tracker: whoever started this Run closes it after reviewing this Run's commits"; fi
+if [ "$no_close" = 1 ]; then tracker_close="do not close the task in the tracker, and reopen it if this Run's work closed it: whoever started this Run closes it after reviewing this Run's commits"; fi
 case $run_dir in ''|/*) ;; *) run_dir=$PWD/$run_dir ;; esac
 
 # --- the tree (RUN-1) ------------------------------------------------------------------------------
