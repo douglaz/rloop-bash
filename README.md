@@ -27,7 +27,8 @@ CI runs `nix build`, the self-check and the Panel trace check on every push and 
 
 Claude Code, Codex and the official Grok Build CLI must already be installed and authenticated.
 Grok inherits its established CLI authentication. The fixed Panel is `fable`, `opus`, `astra`,
-`sol`, `grok`.
+`sol`, `grok`; `fable` is called only under `--fable`, and without it its Feedback File reads
+`REVIEWER NOT RUN (not seated)`.
 
 ### Hosting a long Run
 
